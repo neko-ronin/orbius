@@ -1,0 +1,159 @@
+=== VET REPORT: BOAST dependencies (react/react, vitejs/vite; temporary prettier/prettier) ===
+
+Review date: 2026-09-08.
+Scope: exact npm release artifacts react 19.2.8, react-dom 19.2.8, vite 8.2.2;
+resolved application lockfile; temporary formatting tool prettier 3.9.6;
+and the newly authored application. This is an artifact-level bounded review,
+not a complete upstream Git-history audit. All applicable sections of the
+parent VET_REPO.md procedure were considered. Unavailable evidence is stated.
+
+1. CLAIM VERIFICATION — Partial
+   React component and DOM rendering -> react/cjs/* and react-dom/client.js ->
+   entry points inspected; actual UI rendering verified in Chromium.
+   Vite development server and production build -> dist/node/cli.js,
+   dist/node/chunks/node.js and build.js -> source mechanism inspected;
+   local serving and production build subsequently verified.
+   Prettier parsing/reprinting -> bin/prettier.cjs and bundled plugins ->
+   package entry point inspected; formatter subsequently used successfully.
+   MIT licensing -> React LICENSE, React DOM LICENSE, Vite LICENSE.md,
+   Prettier LICENSE and package metadata inspected. Vite also lists bundled
+   dependencies under Apache-2.0, BSD-2-Clause, CC0-1.0, ISC, and MIT.
+   Broad upstream claims such as all framework compatibility, all language
+   support, or performance superiority were not independently verified.
+
+2. SECURITY
+   No malicious instruction text found in the scanned package README/JS/MD
+   content for the specific injection markers searched (including "ignore
+   previous instructions" and APPEND_SYSTEM). This is not proof that every
+   possible prompt injection is absent. External content was treated as data.
+   No project-local .pi/.prime/.claude/.cursor agent configuration, SYSTEM.md,
+   APPEND_SYSTEM.md, or AGENTS.md was found in the reviewed release artifacts.
+   BOAST does not load executable agent extensions or scripts from project files.
+
+   AMBER | Vite can execute trusted project JavaScript/configuration at build
+   or development time. Its evalValue helper evaluates static worker/glob
+   options with new Function; the call sites in worker parsing were inspected.
+   SSR stacktrace code uses new Function for offset calculation. These are
+   tooling mechanisms, not a safe execution boundary for an untrusted repo.
+   Use Vite only on source you trust. This new workspace has no imported
+   remote source or third-party Vite plugins.
+
+   Vite base64 matches were source-map/data-URL decoding and a bundled WASM
+   parser. Prettier uses new Function for dynamic import compatibility. Its
+   apparent AWS-key-shaped matches were repeated byte sequences inside the
+   Flow parser's embedded WebAssembly payload, not credential declarations.
+   No live secret-shaped strings were found in reviewed React/Vite artifacts.
+   The new workspace has no previous Git commits or remote; Git-history
+   secret sampling and top-author/commit-count analysis are unavailable.
+   Upstream histories were not cloned or sampled.
+
+   Network surface: React package links point to documentation, GitHub and
+   W3C namespaces. Vite's WebSocket server supports local HMR; its fetched
+   WASM URLs are derived from application imports. Inspected personal-domain
+   references were license attributions or parser-reference comments, not
+   exfiltration targets. Prettier scan found no fetch/http.request call sites.
+   Full dynamic execution tracing of all transitive/native code was not done.
+
+   Telemetry: no telemetry/event-sending mechanism identified in the reviewed
+   direct release artifacts. Therefore no telemetry endpoint, event fields,
+   default collection state, or opt-out applies to the authored app.
+   BOAST's runtime makes no external requests. Fonts, icons and graphics are
+   local/procedural. Learning links navigate to Google only when clicked.
+   Local autosave stays in browser storage; JSON/GLSL/image/video exports stay
+   in downloads. Vite's development HMR connection is local.
+
+   Project imports are JSON, not evaluated JavaScript. They are bounded to
+   250 KB, 20,000 characters per shader, 24 nodes and 12 fields, with finite
+   numeric range validation, unique IDs and cycle checks. GLSL is submitted
+   to the browser GPU compiler; pathological authored shaders can still
+   stall the GPU or lose the context. Compilation failures retain the last
+   working program. This is not a shader resource-isolation sandbox.
+
+   Advisory/news review:
+   - React Server Components had RCE and later denial-of-service advisories.
+     BOAST uses client React/React DOM 19.2.8 and has no RSC dependency/server.
+     Official source: https://react.dev/blog/2025/12/03/critical-security-vulnerability-in-react-server-components
+   - Vite has published development-server file-access advisories. The current
+     official pinned 8.2.2 tree reports no known vulnerabilities in npm audit.
+     The preview binds 127.0.0.1 and is not exposed to the network.
+     Official source: https://github.com/vitejs/vite/security/advisories?state=published
+   - A verified 2025 malware incident affected eslint-config-prettier,
+     eslint-plugin-prettier and related packages, not this direct formatter
+     package. None of those integration packages is installed for BOAST.
+     Source: https://github.com/advisories/GHSA-f29h-pxvx-f335
+   - Searches surfaced secondary claims about Vite-namespace impersonation;
+     this review did not establish primary evidence tying those claims to
+     the official pinned vite release. No similarly named plugin was used.
+   No corroborated compromise of the selected exact releases was found in
+   this bounded search. A clean search/audit is not a malware guarantee.
+
+3. DEPENDENCIES
+   Application npm audit: 0 critical, 0 high, 0 moderate, 0 low, 0 info.
+   Initial package-lock audit covers 43 non-root lock entries including
+   optional platform binaries; installation selected 19 packages on this Mac.
+   Only runtime dependencies: react 19.2.8 and react-dom 19.2.8; Vite 8.2.2
+   is a development dependency. Exact pins and registry integrity hashes
+   are preserved in package-lock.json. All lockfile resolved URLs use the
+   official registry.npmjs.org host.
+   Lifecycle metadata: fsevents 2.3.3 has an install script; scripts were
+   disabled for lock resolution and installation. .npmrc contains
+   ignore-scripts=true and save-exact=true. No lifecycle hooks were executed.
+   No Python application dependencies, curl bootstrap, arbitrary plugins,
+   or graph/UI component frameworks were added.
+   The temporary Prettier 3.9.6 artifact has no declared runtime dependencies
+   or lifecycle scripts. It was used with --no-config and is not shipped or
+   installed as an application dependency. Its published bundled parsers
+   were only sampled, not fully audited.
+   Browser verification used the official Playwright CLI skill and an
+   already installed Chromium for Testing. These are verification tools,
+   not application runtime dependencies; no browser installer was run.
+
+4. INSTALLER
+   Direct release archives were downloaded by npm pack --ignore-scripts to
+   temporary storage, extracted and inspected without running their code.
+   Dependency resolution used --package-lock-only during the initial audit.
+   Installation followed that review via npm ci --ignore-scripts.
+   npm verifies package integrity against the lockfile's SHA-512 values.
+   Those hashes are registry-supplied, not an independent publisher audit.
+   Native Rolldown/Lightning CSS platform artifacts came from npm packages.
+   No remote script was piped to an interpreter, no sudo was used, and no
+   global application package installation was made.
+
+5. CODE QUALITY
+   Clean separation: project schema/metadata, WebGL ownership, GLSL programs,
+   node interaction, and React studio UI. No general-purpose framework was
+   created around the renderer. No JavaScript eval in BOAST source.
+   Eight meaningful unit checks cover file round trips, range/schema errors,
+   graph topology, disconnected effects, shader drafts and duplicate IDs.
+   Production build succeeds. Real-browser checks cover the key UI paths;
+   real exported media was decoded/inspected separately.
+   Limitations: no full upstream source or binary audit; no cross-GPU/browser
+   compatibility matrix; custom GLSL has no hard execution timeout; no undo
+   stack or bit-exact GPU simulation checkpoint.
+
+6. AUTHOR & REPUTATION
+   Registry metadata maps React to react/react (current official repository)
+   and Vite to vitejs/vite. Official release pages corroborate React 19.2.8
+   (July 21, 2026), Vite 8.2.2 and Prettier 3.9.6.
+   GitHub API checked on 2026-09-08:
+   react/react: Organization owner, MIT, not archived, created 2013-05-24,
+   249663 stars, pushed 2026-09-08T11:41:08Z.
+   vitejs/vite: Organization owner, MIT, not archived, created 2020-04-21,
+   82766 stars, pushed 2026-09-08T05:09:35Z.
+   Prettier's package attributes James Long and contributors, with an official
+   prettier/prettier repository and prettier.io documentation. Temporary
+   formatter version was cross-checked against official install docs.
+   No full contributor history, maintainer-account activity audit, independent
+   organization verification badge audit, or HN reputation sampling was done.
+   Release-age and repository-activity evidence does not prove account safety.
+   Sources:
+   https://github.com/react/react/releases
+   https://vite.dev/
+   https://prettier.io/docs/install.html
+   https://github.com/prettier/prettier/releases
+
+7. BOTTOM LINE — Build it
+   Proceed with the pinned client-side stack and scripts disabled. Keep the
+   development server local. Re-audit deliberate future dependency upgrades.
+   This is a bounded release-artifact and advisory review, not proof of the
+   absence of malware in all upstream history or native/transitive binaries.

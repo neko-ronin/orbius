@@ -1,0 +1,77 @@
+# BOAST — Light laboratory
+
+A local-first visual instrument built with React and WebGL 2. No account, backend, API keys, or external assets are required.
+
+## Run
+
+```sh
+npm ci
+npm run dev
+```
+
+Open http://127.0.0.1:5173. The dependency lockfile is included in the project files; `.npmrc` disables package lifecycle scripts. Use a modern Node version compatible with Vite 8 (Node 22.12+ recommended). The development server binds to loopback only.
+
+```sh
+npm test       # project validation and graph evaluation
+npm run build # static production output in dist/
+npm run preview
+```
+
+## Make something
+
+- **Particle playground** opens first. Five presets, five palettes, 80,000 default particles (up to 160,000), GPU simulation, 3D orbital motion, procedural flow, trails, bloom, exposure, and camera controls.
+- **Orb studio** ray-marches an editable closed surface. Geometry, normal calculation, ambient occlusion, self-shadowing, and secondary reflection rays use the same distance field. Open **GLSL editor** to edit `shape(vec3 p)` and `pigment(vec3 p, vec3 n)`. A failed compilation leaves the last working program on screen. The surface file can be exported as GLSL.
+- **Node composer** connects a particle or orb source through curl, spiral warp, color grade, and bloom to one stage output. Drag cards to arrange them. Click an output port and then an input port to wire them. Click a wire to disconnect. Only the chain reaching the output affects rendering; disconnected output renders an empty stage. Cycles and multiple input connections are rejected. Up to 24 nodes.
+- **Show mode** hides the studio UI and increases resolution from 70% to 150% by default. Both scales are adjustable. Orb primary rays use 80 steps in development and 192 in show mode; secondary rays and shadow samples also increase. Rendering is capped at 3840 px on the longer edge and at the GPU texture limit. Exit with `S`, `Escape`, or the top-right control (revealed on hover/focus; faintly visible on touch devices).
+
+Each numeric control has an explanation on hover or focus, an example, and a learning-search link. Expand the inspector sections to reach all parameters. Light color affects newly placed lights. The interaction strength and radius affect newly placed fields; existing field strengths can be changed under **Placed fields**.
+
+| Key | Action |
+| --- | --- |
+| `1` | Orbit camera tool; drag the stage |
+| `G` | Place an attractive gravity well |
+| `R` | Place a repulsive field |
+| `V` | Place a vortex |
+| `L` | Place a colored light |
+| `B` | Create a short outward shockwave |
+| `F` | Place a field that damps nearby motion |
+| `Shift` + click | Double the new field's strength |
+| `X` | Clear fields |
+| Scroll | Zoom |
+| `Space` | Pause / play |
+| `S` / `Escape` | Enter / leave show mode |
+| `P` | Download a high-resolution PNG |
+| `C` | Start / stop a recording, up to 30 seconds |
+| `Cmd/Ctrl S` | Save the project |
+| `?` | Field guide |
+
+Keyboard shortcuts are suspended while typing. Click a field marker to delete that field. There are at most 12 simultaneous fields. Orb interaction uses camera dragging; particle field markers are hidden there.
+
+## Save, recover, export
+
+**Save** downloads a portable `.boast.json` project. **Open** loads one from disk. Files contain parameters, the workspace, node positions and connections, fields, the working shader, and an unfinished shader draft. Loading validates the format, sizes, ranges, identifiers, and graph structure before applying the scene. Compilation failure aborts loading and retains the previous scene.
+
+The browser keeps a debounced local autosave and offers to restore it on the next visit. Use explicit disk saves for durable copies. There is no server storage or cloud sync. Saved projects recreate settings and field placement, not a bit-exact checkpoint of all GPU particle positions or wall-clock time. Transient shockwaves are omitted.
+
+PNG export captures the canvas at 3840 px wide, limited by GPU capabilities, preserving the current aspect ratio and accumulated trails. UI is never part of canvas exports. Pre-existing trail history is resampled at the new resolution; newly rendered points use the target resolution. For the sharpest fresh trails, let show mode run briefly before capturing.
+
+Video uses the browser's MediaRecorder with a 30 FPS capture stream and a 12 Mbps requested bitrate, preferring VP9 WebM, then VP8 WebM, then MP4 where supported. It records the current canvas resolution. Enter show mode before starting a recording and keep its dimensions stable. The 30-second limit bounds memory use; playback metadata and codec availability vary by browser. Audio is not recorded.
+
+## Rendering boundaries
+
+This is a real-time artistic renderer, not a physically based path tracer. Orb reflection rays can hit neighboring folds; otherwise they sample an analytic environment. Refraction uses the refraction index to bend an interior color sample, not a full volumetric transmission model. Very aggressive or non-distance GLSL can introduce ray-marching artifacts or exhaust GPU time. The inspector's supplied geometry range also allows disconnected lobes at high displacement.
+
+Node graphs are a single-input composition chain with reusable branches, not a general-purpose image mixer or arbitrary GLSL node compiler. Repeated nodes of the same parameter type use the last connected value. Particle motion nodes affect the particle simulation; on orbs they change the surface domain warp.
+
+WebGL 2 is required. Float color targets are used when `EXT_color_buffer_float` is available, with an RGBA8 fallback. Performance depends on GPU, output size, particle count, and shader complexity. Context loss displays a recovery message instead of silently continuing with a broken image. Touch layout is supported; desktop is the primary authoring experience. Browser chrome remains browser-controlled in show mode.
+
+## Source map
+
+- `src/main.jsx`: studio state, inspector, controls, persistence, capture, and keyboard interaction.
+- `src/engine.js`: WebGL resource ownership, transform feedback, render targets, simulation, capture, and cleanup.
+- `src/shaders.js`: simulation, point sprites, feedback, compositing, and orb shader assembly.
+- `src/project.js`: parameter metadata, presets, palettes, file validation, and graph evaluation.
+- `src/NodeEditor.jsx`: node manipulation and connections.
+- `src/style.css`: studio design language, responsive layout, and interaction states.
+
+Validation evidence is summarized in `docs/VALIDATION.md`. Dependency review, provenance, limitations, and advisory sources are in `docs/VET_REPORT.txt`. No commit or push was made during creation.
