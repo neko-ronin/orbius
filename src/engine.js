@@ -1,3 +1,8 @@
+import { ObjectRenderer } from "./objects/Renderer.js";
+import { SpeciesField } from "./particles/SpeciesField.js";
+import { Chemistry } from "./materials/Chemistry.js";
+import { materialFragment } from "./materials/fragment.js";
+import { materialDefaults } from "./materials/catalog.js";
 import {
   quadVertex,
   simVertex,
@@ -13,7 +18,7 @@ const rgb = (hex) =>
   [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
 const fieldTypes = ["attract", "repel", "vortex", "light", "burst", "freeze"];
 export class Engine {
-  constructor(canvas, onStats, onError) {
+  constructor(canvas, onStats, onError, animate = true) {
     this.canvas = canvas;
     this.onStats = onStats;
     this.onError = onError;
@@ -52,15 +57,19 @@ export class Engine {
     this.particles = this.program(particleVertex, particleFragment);
     this.fade = this.program(quadVertex, fadeFragment);
     this.composite = this.program(quadVertex, compositeFragment);
+    this.material = this.program(quadVertex, materialFragment);
     this.orb = this.program(quadVertex, orbFragment(defaultShader));
     const gl = this.gl;
     this.emptyVAO = gl.createVertexArray();
     this.feedback = gl.createTransformFeedback();
+    this.chemistry = new Chemistry(this);
+    this.speciesField = new SpeciesField(this);
+    this.objectsRenderer = new ObjectRenderer(this);
     this.last = performance.now();
     this.statTime = this.last;
     this.frames = 0;
     this.frame = this.frame.bind(this);
-    this.raf = requestAnimationFrame(this.frame);
+    if (animate) this.raf = requestAnimationFrame(this.frame);
   }
   program(vertex, fragment, varyings) {
     const gl = this.gl;
@@ -140,7 +149,8 @@ export class Engine {
       data.set(
         [
           x,
-          (rand() - 0.5) * c.depth * (0.2 + r * 0.45),
+          (rand() - 0.5) * c.depth * (0.2 + r * 0.45) +
+            (c.speciesEnabled ? ((i % 3) - 1) * 0.6 : 0),
           z,
           rand() * c.life,
           -z * c.spin * 0.3,
@@ -167,6 +177,9 @@ export class Engine {
     gl.bindVertexArray(null);
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
     this.read = 0;
+    this.time = 0;
+    this.simAccumulator = 0;
+    this.chemistry?.reset();
     this.clear();
   }
   clear() {
@@ -280,7 +293,14 @@ export class Engine {
     )
       this.resize(w, h);
     if (this.count !== Math.round(c.count)) this.reset(c);
-    const dt = this.paused ? 0 : Math.min(delta, 0.033) * c.speed;
+    const frameDt = this.paused ? 0 : Math.min(delta, 0.1) * c.speed;
+    this.simAccumulator = Math.min(
+      (this.simAccumulator || 0) + (this.mode === "particles" ? frameDt : 0),
+      8 / 120,
+    );
+    const simSteps = this.paused ? 0 : Math.floor(this.simAccumulator * 120);
+    const dt = this.mode === "particles" ? simSteps / 120 : frameDt;
+    if (this.mode === "particles") this.simAccumulator -= dt;
     this.time += dt;
     this.tick += dt;
     const rotation = c.rotation + this.time * c.autoRotate;
@@ -295,15 +315,24 @@ export class Engine {
       uColorB: colors[1],
       uColorC: colors[2],
       uHue: c.hue,
+      uSpeciesEnabled: c.speciesEnabled,
     };
     gl.viewport(0, 0, w, h);
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.BLEND);
     if (this.mode === "particles") {
-      if (dt > 0) {
+      for (let step = 0; step < simSteps; step++) {
+        if (c.speciesEnabled) {
+          this.speciesField.render();
+          gl.viewport(0, 0, w, h);
+          gl.activeTexture(gl.TEXTURE2);
+          gl.bindTexture(gl.TEXTURE_2D, this.speciesField.tex);
+          gl.activeTexture(gl.TEXTURE0);
+        }
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         this.set(this.sim, {
           ...shared,
-          uDt: dt,
+          uDt: 1 / 120,
           uLife: c.life,
           uSpread: c.spread,
           uSpin: c.spin,
@@ -314,7 +343,13 @@ export class Engine {
           uDepth: c.depth,
           uArms: c.arms,
           uTwist: c.twist,
+          uCouplingA: [c.pairAA, c.pairAB, c.pairAC],
+          uCouplingB: [c.pairBA, c.pairBB, c.pairBC],
+          uCouplingC: [c.pairCA, c.pairCB, c.pairCC],
+          uSpeciesDrag: [c.speciesDragA, c.speciesDragB, c.speciesDragC],
+          uSpeciesLift: [c.speciesLiftA, c.speciesLiftB, c.speciesLiftC],
         });
+        this.uniform(this.sim, "uDensity", 2, "int");
         this.fields(this.sim, this.fieldList || []);
         gl.bindVertexArray(this.vaos[this.read]);
         gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, this.feedback);
@@ -359,6 +394,43 @@ export class Engine {
         this.rendered = true;
         this.previousConfig = c;
       }
+    } else if (this.mode === "glass") {
+      this.objectsRenderer.render(
+        this.objects || [],
+        c,
+        shared,
+        w,
+        h,
+        this.targets[this.trailRead].fb,
+      );
+    } else if (this.mode === "orb" && c.family > 0) {
+      if (this.mode === "orb" && c.family === 2)
+        this.chemistry.advance(dt, c.reactionFeed, c.reactionKill);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, this.chemistry.texture);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.viewport(0, 0, w, h);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.targets[this.trailRead].fb);
+      gl.bindVertexArray(this.emptyVAO);
+      this.set(this.material, {
+        ...shared,
+        uResolution: [w, h],
+        uIor: c.ior,
+        uReflection: c.reflection,
+        uRoughness: c.roughness,
+      });
+      for (const key of Object.keys(materialDefaults)) {
+        const uniform = "u" + key[0].toUpperCase() + key.slice(1);
+        this.uniform(
+          this.material,
+          uniform,
+          c[key],
+          ["family", "container", "interior"].includes(key) ? "int" : undefined,
+        );
+      }
+      this.uniform(this.material, "uChemistry", 1, "int");
+      this.uniform(this.material, "uSteps", this.show ? 160 : 88, "int");
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
     } else if (this.mode === "orb") {
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.targets[this.trailRead].fb);
       gl.bindVertexArray(this.emptyVAO);
@@ -449,6 +521,9 @@ export class Engine {
     this.disposed = true;
     cancelAnimationFrame(this.raf);
     const gl = this.gl;
+    this.chemistry?.dispose();
+    this.speciesField?.dispose();
+    this.objectsRenderer?.dispose();
     this.programs.forEach((p) => gl.deleteProgram(p));
     this.buffers.forEach((b) => gl.deleteBuffer(b));
     this.vaos.forEach((v) => gl.deleteVertexArray(v));

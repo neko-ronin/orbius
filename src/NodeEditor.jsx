@@ -174,7 +174,7 @@ export default function NodeEditor({ graph, onChange, config, notify }) {
                   )}
                 </div>
                 <b>{kind.label}</b>
-                {!["particles", "orb"].includes(n.type) && (
+                {!["particles", "orb", "glass"].includes(n.type) && (
                   <button
                     className={`port input ${pending ? "awaiting" : ""}`}
                     aria-label={`Connect to ${kind.label}`}

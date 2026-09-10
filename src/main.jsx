@@ -1,3 +1,13 @@
+import { readStored, writeStored } from "./studio/storage.js";
+import ObjectEditor from "./objects/Editor.jsx";
+import SpeciesControls from "./studio/SpeciesControls.jsx";
+import Library from "./studio/Library.jsx";
+import MaterialControls from "./studio/MaterialControls.jsx";
+import {
+  materialPresets,
+  materialBase,
+  materialSections,
+} from "./materials/catalog.js";
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createRoot } from "react-dom/client";
 import Icon from "./Icons.jsx";
@@ -64,7 +74,108 @@ const sections = {
     ["Render quality", ["devScale", "showScale"]],
   ],
 };
+const particleRecipes = [
+  ...presets.map((p, i) => ({ ...p, id: `particle-${i}`, mode: "particles" })),
+  {
+    id: "species",
+    mode: "particles",
+    name: "Three-body weather",
+    tag: "INTERACTING POPULATIONS",
+    values: {
+      speciesEnabled: 1,
+      spin: 0.3,
+      turbulence: 0.6,
+      depth: 1.2,
+      trail: 0.7,
+    },
+  },
+];
 function App() {
+  const [objects, setObjects] = useState([]),
+    [selectedObject, setSelectedObject] = useState(null);
+  const objectHistory = useRef([]);
+  function changeObjects(next) {
+    objectHistory.current = [...objectHistory.current.slice(-19), objects];
+    setObjects(next);
+    setDirty(true);
+  }
+  function undoObjects() {
+    const previous = objectHistory.current.pop();
+    if (previous) {
+      setObjects(previous);
+      setSelectedObject(previous[0]?.id || null);
+      setDirty(true);
+    }
+  }
+
+  const [saved, setSaved] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    readStored("collection")
+      .then((items) => {
+        if (!cancelled && Array.isArray(items))
+          setSaved(
+            items
+              .filter(
+                (i) =>
+                  typeof i?.id === "string" &&
+                  typeof i.preview === "string" &&
+                  i.preview.startsWith("data:image/jpeg;") &&
+                  typeof i.project?.name === "string" &&
+                  i.project.name !== "Phosphor anatomy",
+              )
+              .slice(0, 16),
+          );
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  async function collect() {
+    if (saved.length >= 16) {
+      notify(
+        "Your collection is full. Export or remove a specimen before collecting another.",
+      );
+      return;
+    }
+    try {
+      Object.assign(engine.current, {
+        config: resolved.config,
+        mode: resolved.mode,
+      });
+      engine.current.render(0);
+      const thumb = document.createElement("canvas");
+      thumb.width = 320;
+      thumb.height = Math.round(
+        (320 * canvas.current.height) / canvas.current.width,
+      );
+      thumb
+        .getContext("2d")
+        .drawImage(canvas.current, 0, 0, thumb.width, thumb.height);
+      const preview = thumb.toDataURL("image/jpeg", 0.8);
+      const next = [
+        { id: crypto.randomUUID(), project: project(), preview },
+        ...saved,
+      ];
+      await writeStored("collection", next);
+      setSaved(next);
+      notify("Specimen added to your collection.");
+    } catch {
+      notify("Collection storage is full. Save your project to disk.");
+    }
+  }
+  async function deleteSpecimen(id) {
+    if (!window.confirm("Remove this specimen from your local collection?"))
+      return;
+    const next = saved.filter((s) => s.id !== id);
+    try {
+      await writeStored("collection", next);
+      setSaved(next);
+    } catch {
+      notify("Could not update collection.");
+    }
+  }
   const [config, setConfig] = useState({ ...defaults }),
     [mode, setMode] = useState("particles"),
     [preset, setPreset] = useState(0),
@@ -92,6 +203,7 @@ function App() {
     [recording, setRecording] = useState(false),
     [recover, setRecover] = useState(null),
     [dirty, setDirty] = useState(false);
+  const workspaces = useRef({});
   const tipTimer = useRef(),
     canvas = useRef(),
     engine = useRef(),
@@ -104,6 +216,7 @@ function App() {
     initial = useRef(true);
   latest.current = {
     config,
+    objects,
     mode,
     graph,
     shader,
@@ -114,6 +227,15 @@ function App() {
     paused,
     tool,
   };
+  const recipes = useMemo(
+    () =>
+      mode === "particles" || mode === "nodes"
+        ? particleRecipes
+        : mode === "glass"
+          ? []
+          : materialPresets.filter((p) => p.mode === mode),
+    [mode],
+  );
   const resolved = useMemo(() => {
     if (mode !== "nodes") return { mode, config, active: [] };
     try {
@@ -156,14 +278,23 @@ function App() {
         show,
         paused,
         fieldList: fields,
+        objects,
       });
     }
-  }, [resolved, show, paused, fields]);
+  }, [resolved, show, paused, fields, objects]);
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem("boast-autosave");
-      if (stored) setRecover(validateProject(JSON.parse(stored)));
-    } catch {}
+    let cancelled = false;
+    readStored("autosave")
+      .then((stored) => {
+        if (stored && !cancelled) {
+          const p = validateProject(stored);
+          if (p.name !== "Phosphor anatomy") setRecover(p);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
   useEffect(() => {
     if (!help) return;
@@ -192,7 +323,9 @@ function App() {
     }
     const id = setTimeout(() => {
       try {
-        localStorage.setItem("boast-autosave", JSON.stringify(project()));
+        writeStored("autosave", project()).catch(() =>
+          notify("Local autosave is unavailable. Save your project to disk."),
+        );
       } catch {
         notify(
           "Local autosave is unavailable. Use Save project to keep your work.",
@@ -200,7 +333,7 @@ function App() {
       }
     }, 1500);
     return () => clearTimeout(id);
-  }, [config, mode, graph, compiled, shader, fields, name]);
+  }, [config, mode, graph, compiled, shader, fields, name, objects]);
   function project() {
     const s = latest.current;
     return {
@@ -209,6 +342,7 @@ function App() {
       name: s.name,
       mode: s.mode,
       config: s.config,
+      objects: s.objects,
       shader: s.compiled,
       shaderDraft: s.shader,
       graph: s.graph,
@@ -223,6 +357,9 @@ function App() {
       setShader(p.shaderDraft ?? p.shader);
       setShaderError("");
       setConfig(p.config);
+      setObjects(p.objects || []);
+      setSelectedObject(p.objects?.[0]?.id || null);
+      objectHistory.current = [];
       setMode(p.mode);
       setGraph(p.graph);
       setFields(p.fields);
@@ -250,8 +387,8 @@ function App() {
     const f = e.target.files?.[0];
     e.target.value = "";
     if (!f) return;
-    if (f.size > 250000) {
-      notify("Project is too large. Maximum file size is 250 KB.");
+    if (f.size > 96 * 1024 * 1024) {
+      notify("Project is too large. Maximum file size is 96 MB.");
       return;
     }
     try {
@@ -260,24 +397,15 @@ function App() {
       notify("Could not read that JSON project.");
     }
   }
-  function choosePreset(i) {
-    const c = { ...defaults, ...presets[i].values };
-    setConfig(c);
-    setPreset(i);
-    setName(presets[i].name);
-    setFields([]);
-    setDirty(true);
-    engine.current?.reset(c);
-    notify(`${presets[i].name} loaded.`);
-  }
   function reset() {
     engine.current?.reset(latest.current.config);
     setFields([]);
-    notify("Particles reseeded. Fields cleared.");
+    notify("Simulation restarted. Fields cleared.");
   }
   function compile() {
     try {
       engine.current?.compile(shader);
+      update("family", 0);
       setCompiled(shader);
       setShaderError("");
       setDirty(true);
@@ -392,7 +520,7 @@ function App() {
   });
   function stageDown(e) {
     if (e.button !== 0) return;
-    if (tool === "cursor" || resolved.mode === "orb") {
+    if (tool === "cursor" || resolved.mode !== "particles") {
       drag.current = {
         x: e.clientX,
         y: e.clientY,
@@ -444,6 +572,26 @@ function App() {
     );
   }
   function switchMode(next) {
+    if (next === mode) return;
+    workspaces.current[mode] = { config, name, fields };
+    const stored = workspaces.current[next];
+    if (stored) {
+      setConfig(stored.config);
+      setName(stored.name);
+      setFields(stored.fields);
+    } else if (next === "orb" || next === "glass") {
+      const recipe = materialPresets.find((p) => p.mode === next) || {
+        name: "Untitled composition",
+        values: {},
+      };
+      setConfig({ ...defaults, ...materialBase, ...recipe.values });
+      setName(next === "glass" ? "Untitled composition" : recipe.name);
+      setFields([]);
+    } else if (next === "particles") {
+      setConfig({ ...defaults });
+      setName("Event horizon");
+      setFields([]);
+    }
     setMode(next);
     setTab("parameters");
     setTip(null);
@@ -451,8 +599,60 @@ function App() {
     engine.current?.clear();
   }
   function control(key) {
-    const p = controls[key],
+    const p =
+        key === "reflection" && (resolved.mode === "glass" || config.family > 0)
+          ? ["Studio reflections", ...controls[key].slice(1)]
+          : controls[key],
       v = config[key];
+    if (resolved.mode === "glass") {
+      if (key === "branchDetail" && config.interior !== 0) return null;
+      if (
+        ["materialScale", "materialFold"].includes(key) &&
+        config.interior !== 2
+      )
+        return null;
+    }
+    if (resolved.mode === "orb" && config.family > 0) {
+      const relevant =
+        config.family === 1 || config.family === 4
+          ? [
+              "materialScale",
+              "materialFold",
+              "interiorMotion",
+              "emission",
+              ...(config.family === 4 ? ["reflection"] : []),
+            ]
+          : config.family === 2
+            ? [
+                "materialScale",
+                "surfaceActivity",
+                "emission",
+                "reactionFeed",
+                "reactionKill",
+              ]
+            : [
+                "materialScale",
+                "materialFold",
+                "interiorMotion",
+                "roughness",
+                "reflection",
+              ];
+      if (
+        [
+          "materialScale",
+          "materialFold",
+          "surfaceActivity",
+          "interiorMotion",
+          "emission",
+          "reactionFeed",
+          "reactionKill",
+          "roughness",
+          "reflection",
+        ].includes(key) &&
+        !relevant.includes(key)
+      )
+        return null;
+    }
     return (
       <div className="control" key={key}>
         <div className="control-label">
@@ -531,7 +731,8 @@ function App() {
         <nav aria-label="Workspaces">
           {[
             ["particles", "Particle playground", "particles"],
-            ["orb", "Orb studio", "orb"],
+            ["orb", "Orb shaders", "orb"],
+            ["glass", "Glass objects", "orb"],
             ["nodes", "Node composer", "nodes"],
           ].map(([m, label, icon]) => (
             <button
@@ -570,47 +771,29 @@ function App() {
         </div>
       </header>
       <div className="workspace">
-        <aside className="library">
-          <div className="panel-eyebrow">
-            YOUR STARTING POINT <span>01—05</span>
-          </div>
-          <h2>A little inspiration.</h2>
-          <p className="intro">
-            Start somewhere.
-            <br />
-            End up somewhere else.
-          </p>
-          <div className="preset-list">
-            {presets.map((p, i) => (
-              <button
-                key={p.name}
-                className={`preset ${preset === i ? "selected" : ""}`}
-                onClick={() => choosePreset(i)}
-              >
-                <div className={`preset-art art-${i}`}>
-                  <div className="mini-orbit" />
-                  <span className="preset-number">0{i + 1}</span>
-                  {preset === i && (
-                    <span className="preset-check">
-                      <Icon name="check" size={12} />
-                    </span>
-                  )}
-                </div>
-                <div className="preset-meta">
-                  <b>{p.name}</b>
-                  <small>{p.tag}</small>
-                </div>
-              </button>
-            ))}
-          </div>
-          <div className="library-note">
-            <Icon name="spark" size={20} />
-            <p>
-              Beautiful things happen
-              <br />
-              when you break the rules.
-            </p>
-          </div>
+        <aside className="library" key={`library-${mode}`}>
+          <Library
+            kind={mode}
+            recipes={recipes}
+            saved={saved}
+            onSave={collect}
+            onLoad={apply}
+            onDelete={deleteSpecimen}
+            onChoose={(r) => {
+              const c = {
+                ...defaults,
+                ...(r.mode === "particles" ? {} : materialBase),
+                ...r.values,
+              };
+              setConfig(c);
+              setMode(r.mode);
+              setName(r.name);
+              setPreset(-1);
+              setFields([]);
+              setDirty(true);
+              engine.current?.reset(c);
+            }}
+          />
           <button className="guide-button" onClick={() => setHelp(true)}>
             <Icon name="help" size={15} />
             Field guide
@@ -621,11 +804,13 @@ function App() {
           <div className="stage-heading">
             <div>
               <span className="eyebrow">
-                {mode === "orb"
-                  ? "MATERIAL EXPLORATION"
-                  : mode === "nodes"
-                    ? "COMPOSE THE UNEXPECTED"
-                    : "REAL-TIME PARTICLE SYSTEM"}
+                {mode === "glass"
+                  ? "ENCLOSURES / INNER WORLDS"
+                  : mode === "orb"
+                    ? "MATERIAL EXPLORATION"
+                    : mode === "nodes"
+                      ? "COMPOSE THE UNEXPECTED"
+                      : "REAL-TIME PARTICLE SYSTEM"}
               </span>
               <div className="project-title">
                 <input
@@ -660,7 +845,9 @@ function App() {
               aria-label={
                 resolved.mode === "orb"
                   ? "Interactive ray-marched orb preview"
-                  : "Interactive particle visualization"
+                  : resolved.mode === "particles"
+                    ? "Interactive particle visualization"
+                    : "Interactive material visualization"
               }
               onPointerDown={stageDown}
               onPointerMove={stageMove}
@@ -682,8 +869,12 @@ function App() {
                 </div>
                 <div className="stage-top-right">
                   {resolved.mode === "orb"
-                    ? "SDF / SELF-INTERACTING"
-                    : "GPU / TRANSFORM FEEDBACK"}
+                    ? config.family === 0
+                      ? "SDF / CUSTOM SURFACE"
+                      : "GPU / MATERIAL FAMILY"
+                    : resolved.mode === "particles"
+                      ? "GPU / TRANSFORM FEEDBACK"
+                      : "GPU / VOLUMETRIC MATERIAL"}
                 </div>
                 <div className="stage-bottom-left">
                   <span className="axis-mark">
@@ -727,6 +918,17 @@ function App() {
                 )}
               </>
             )}
+            {resolved.mode === "glass" && !objects.length && !show && (
+              <div className="mesh-stage-empty">
+                <span>OBJECT COMPOSITION</span>
+                <h2>Choose a form. Make it yours.</h2>
+                <p>
+                  Add a glass orb or cylinder, or import an OBJ or STL mesh.
+                  <br />
+                  Turn it into glass, surface dots, or a filled dot volume.
+                </p>
+              </div>
+            )}
             {error && (
               <div className="render-error" role="alert">
                 <Icon name="help" size={30} />
@@ -748,8 +950,8 @@ function App() {
             <div className="tool-label">
               <span>MAKE AN IMPACT</span>
               <small>
-                {resolved.mode === "orb"
-                  ? "Drag to orbit the surface"
+                {resolved.mode !== "particles"
+                  ? "Drag to explore the object"
                   : "Select a tool, then click the canvas"}
               </small>
             </div>
@@ -757,7 +959,7 @@ function App() {
               {tools.map(([id, label, key]) => (
                 <button
                   key={id}
-                  disabled={resolved.mode === "orb" && id !== "cursor"}
+                  disabled={resolved.mode !== "particles" && id !== "cursor"}
                   className={tool === id ? "selected" : ""}
                   title={`${label} · ${key}`}
                   aria-label={label}
@@ -789,7 +991,7 @@ function App() {
               </button>
               <button
                 className="icon-button"
-                title="Reseed particles and clear fields"
+                title="Restart simulation and clear fields"
                 aria-label="Reseed"
                 onClick={reset}
               >
@@ -810,8 +1012,8 @@ function App() {
             </div>
             <div className="transport-end">
               <span>
-                {resolved.mode === "orb"
-                  ? "80 STEPS"
+                {resolved.mode !== "particles"
+                  ? "MATERIAL / LIVE"
                   : `${Math.round(config.count / 1000)}K PARTICLES`}
               </span>
               <button
@@ -877,31 +1079,84 @@ function App() {
                   <span>HIGHLIGHT</span>
                 </div>
               </div>
-              {sections[resolved.mode === "orb" ? "orb" : "particles"].map(
-                ([title, keys], i) => (
-                  <details key={title} open={i < 2}>
-                    <summary>
-                      <span>{title}</span>
-                      <Icon name="down" size={13} />
-                    </summary>
-                    <div className="section-controls">
-                      {keys.map(control)}
-                      {title === "Interaction" && (
-                        <label className="color-picker">
-                          Light color
-                          <input
-                            type="color"
-                            value={config.lightColor}
-                            onChange={(e) =>
-                              update("lightColor", e.target.value)
-                            }
-                          />
-                        </label>
-                      )}
-                    </div>
-                  </details>
-                ),
+              {resolved.mode === "particles" && (
+                <SpeciesControls
+                  config={config}
+                  update={update}
+                  control={control}
+                />
               )}
+              {resolved.mode === "glass" && (
+                <>
+                  <ObjectEditor
+                    objects={objects}
+                    onChange={changeObjects}
+                    selected={selectedObject}
+                    onSelect={setSelectedObject}
+                    notify={notify}
+                  />
+                  <button
+                    className="object-undo"
+                    disabled={!objectHistory.current.length}
+                    onClick={undoObjects}
+                  >
+                    Undo object change
+                  </button>
+                </>
+              )}
+              {resolved.mode === "orb" && (
+                <MaterialControls
+                  mode={resolved.mode}
+                  config={config}
+                  update={update}
+                  onCollect={collect}
+                  onStart={() => {
+                    setConfig((c) => ({
+                      ...c,
+                      ...materialBase,
+                      family: 4,
+                      materialScale: 3.2,
+                      materialFold: 0.65,
+                      emission: 1.5,
+                    }));
+                    setName("Untitled shader family");
+                    setDirty(true);
+                  }}
+                />
+              )}
+              {(resolved.mode === "glass"
+                ? [
+                    ["Camera", ["zoom", "tilt", "rotation", "autoRotate"]],
+                    [
+                      "Scene finish",
+                      ["bloom", "exposure", "grain", "vignette"],
+                    ],
+                    ["Render quality", ["devScale", "showScale"]],
+                  ]
+                : resolved.mode === "orb" && config.family > 0
+                  ? materialSections.orb
+                  : sections[resolved.mode === "orb" ? "orb" : "particles"]
+              ).map(([title, keys], i) => (
+                <details key={title} open={i < 2}>
+                  <summary>
+                    <span>{title}</span>
+                    <Icon name="down" size={13} />
+                  </summary>
+                  <div className="section-controls">
+                    {keys.map(control)}
+                    {title === "Interaction" && (
+                      <label className="color-picker">
+                        Light color
+                        <input
+                          type="color"
+                          value={config.lightColor}
+                          onChange={(e) => update("lightColor", e.target.value)}
+                        />
+                      </label>
+                    )}
+                  </div>
+                </details>
+              ))}
               <details>
                 <summary>
                   <span>Placed fields</span>
@@ -964,6 +1219,13 @@ function App() {
             <div className="code-panel">
               {resolved.mode === "orb" ? (
                 <>
+                  {config.family > 0 && (
+                    <p className="family-code-note">
+                      This editor is the Custom GLSL surface. Compiling switches
+                      to that family; the built-in material keeps its own
+                      renderer.
+                    </p>
+                  )}
                   <div className="code-intro">
                     <span>surface.glsl</span>
                     <span
@@ -1164,18 +1426,20 @@ function App() {
                 ))}
                 <small>
                   Show mode hides every panel, increases resolution, and raises
-                  orb ray steps from 80 to 192. Keyboard shortcuts still work.
+                  material sampling quality. Keyboard shortcuts still work.
                 </small>
               </div>
             </div>
             <div className="guide-bottom">
-              <h3>Three ways to make something extraordinary.</h3>
+              <h3>Four ways to make something extraordinary.</h3>
               <p>
                 <b>Particles</b> · Sculpt a living cloud with forces and light.
                 <br />
-                <b>Orb studio</b> · Edit a closed surface with real self-shadow
-                and secondary reflection rays. Refraction is an artistic
-                interior color approximation.
+                <b>Orb shaders</b> · Explore iridescent volumes, evolving
+                surface chemistry, reflective metal, or a custom GLSL surface.
+                <br />
+                <b>Glass objects</b> · Import OBJ or STL meshes and combine
+                independent glass shells, surface dots, and filled dot volumes.
                 <br />
                 <b>Node composer</b> · Connect a source through motion, color,
                 and bloom to the output. Disconnected nodes don’t affect the

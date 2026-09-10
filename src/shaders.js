@@ -8,14 +8,16 @@ layout(location=0) in vec4 aPosition;
 layout(location=1) in vec4 aVelocity;
 out vec4 vPosition;out vec4 vVelocity;
 uniform float uDt,uTime,uLife,uSpread,uSpin,uTurbulence,uFrequency,uDrag,uGravity,uDepth,uArms,uTwist,uTilt,uRotation,uZoom,uAspect;
+uniform float uSpeciesEnabled;
 uniform int uFieldCount;
 uniform vec4 uFields[12];uniform vec4 uFieldExtra[12];
+uniform sampler2D uDensity;uniform vec3 uCouplingA,uCouplingB,uCouplingC,uSpeciesDrag,uSpeciesLift;
 float hash(float n){return fract(sin(n*127.1)*43758.5453);}
 vec3 spawn(float seed){float r=sqrt(hash(seed+1.))*uSpread;float a=floor(hash(seed+2.)*uArms)*6.283185/uArms+r*uTwist+(hash(seed+3.)-.5)*.25;return vec3(cos(a)*r,(hash(seed+4.)-.5)*uDepth*(.2+r*.45),sin(a)*r);}
 mat3 camera(){float c=cos(uRotation),s=sin(uRotation),ct=cos(uTilt),st=sin(uTilt);return mat3(1,0,0,0,ct,st,0,-st,ct)*mat3(c,0,-s,0,1,0,s,0,c);}
 void main(){
  vec3 p=aPosition.xyz,v=aVelocity.xyz;float age=aPosition.w+uDt,seed=aVelocity.w;
- if(age>uLife||length(p)>7.){p=spawn(seed);age=0.;v=vec3(-p.z,0.,p.x)*uSpin*.3;}
+ if(age>uLife||length(p)>7.){p=spawn(seed);if(uSpeciesEnabled>.5)p.y+=(mod(floor(seed),3.)-1.)*.6;age=0.;v=vec3(-p.z,0.,p.x)*uSpin*.3;}
  vec3 q=p*uFrequency;float t=uTime*.2;
  vec3 flow=vec3(cos(q.y+t)+sin(q.z-t),cos(q.z+t)+sin(q.x),cos(q.x-t)+sin(q.y+t));
  vec3 acc=flow*uTurbulence*.3+vec3(-p.z,0,p.x)*uSpin*.18-p*.055;
@@ -28,7 +30,9 @@ void main(){
  if(kind==5)v*=exp(-fall*f.w*uDt*6.);
  acc+=transpose(cam)*force;
  }
- v+=acc*uDt;v*=exp(-uDrag*uDt);p+=v*uDt;
+ float damping=uDrag;
+ if(uSpeciesEnabled>.5){int species=int(mod(floor(seed),3.));vec2 st=p.xz/8.+.5;vec2 pixel=vec2(1./128.,0);vec3 gx=texture(uDensity,st+pixel).rgb-texture(uDensity,st-pixel).rgb;vec3 gz=texture(uDensity,st+pixel.yx).rgb-texture(uDensity,st-pixel.yx).rgb;vec3 weights=species==0?uCouplingA:species==1?uCouplingB:uCouplingC;acc.xz+=clamp(vec2(dot(gx,weights),dot(gz,weights))*4.,vec2(-2.),vec2(2.));acc.y+=uSpeciesLift[species];damping+=uSpeciesDrag[species];}
+ v+=acc*uDt;v*=exp(-damping*uDt);p+=v*uDt;
  vPosition=vec4(p,age);vVelocity=vec4(v,seed);gl_Position=vec4(0);
 }`;
 export const emptyFragment = `#version 300 es
@@ -38,12 +42,14 @@ precision highp float;
 layout(location=0) in vec4 aPosition;layout(location=1) in vec4 aVelocity;
 uniform float uTilt,uRotation,uAspect,uZoom,uSize,uPixelRatio,uLife,uHue;
 uniform vec3 uColorA,uColorB,uColorC;
+uniform float uSpeciesEnabled;
 uniform int uFieldCount;uniform vec4 uFields[12];uniform vec4 uFieldExtra[12];uniform vec3 uFieldColors[12];
 out vec3 color;out float alpha;
 void main(){float c=cos(uRotation),s=sin(uRotation),ct=cos(uTilt),st=sin(uTilt);vec3 p=mat3(c,0,-s,0,1,0,s,0,c)*aPosition.xyz;p=mat3(1,0,0,0,ct,st,0,-st,ct)*p;float z=max(1.,4.5-p.z);vec2 screen=p.xy*2.*uZoom/vec2(uAspect,1.)/z;gl_Position=vec4(screen,clamp(z/12.,0.,1.),1);
  gl_PointSize=clamp(uSize*uPixelRatio*4./z,1.,32.);
  float f=fract(aVelocity.w*.013+length(aPosition.xyz)*.17+uHue);color=f<.5?mix(uColorA,uColorB,f*2.):mix(uColorB,uColorC,(f-.5)*2.);
- alpha=smoothstep(0.,.6,aPosition.w)*(1.-smoothstep(uLife*.75,uLife,aPosition.w))*.14;
+ if(uSpeciesEnabled>.5){int species=int(mod(floor(aVelocity.w),3.));color=species==0?vec3(1.,.5,.08):species==1?vec3(.08,.8,1.):vec3(1.,.15,.5);}
+ alpha=smoothstep(0.,.6,aPosition.w)*(1.-smoothstep(uLife*.75,uLife,aPosition.w))*(uSpeciesEnabled>.5?.07:.14);
  for(int i=0;i<12;i++){if(i>=uFieldCount)break;if(int(uFields[i].z)==3){float d=length((screen-uFields[i].xy)*vec2(uAspect,1.));color+=uFieldColors[i]*exp(-d*d/(uFieldExtra[i].x*.15))*uFields[i].w;}}
 }`;
 export const particleFragment = `#version 300 es
@@ -53,7 +59,7 @@ export const fadeFragment = `#version 300 es
 precision highp float;in vec2 uv;uniform sampler2D uTexture;uniform float uFade;out vec4 frag;void main(){frag=vec4(texture(uTexture,uv).rgb*uFade,1);}`;
 export const compositeFragment = `#version 300 es
 precision highp float;in vec2 uv;uniform sampler2D uTexture;uniform vec2 uResolution;uniform float uBloom,uExposure,uGrain,uVignette,uTime;out vec4 frag;
-void main(){vec3 col=texture(uTexture,uv).rgb;vec3 glow=vec3(0);for(int i=0;i<12;i++){float a=float(i)*6.283185/12.;vec2 off=vec2(cos(a),sin(a))/uResolution;glow+=texture(uTexture,uv+off*4.).rgb*.5+texture(uTexture,uv+off*12.).rgb*.3+texture(uTexture,uv+off*28.).rgb*.2;}col+=glow*uBloom/12.;col=vec3(1.)-exp(-col*uExposure);col=pow(col,vec3(.88));float v=length((uv-.5)*1.4);col*=1.-v*v*uVignette;float noise=fract(sin(dot(uv*uResolution,vec2(12.9898,78.233))+floor(uTime*24.))*43758.5453)-.5;col+=noise*uGrain;frag=vec4(max(col,vec3(.012,.014,.023)),1);}`;
+void main(){vec3 col=texture(uTexture,uv).rgb;vec3 glow=vec3(0);for(int i=0;i<12;i++){float a=float(i)*6.283185/12.;vec2 off=vec2(cos(a),sin(a))/uResolution*(uResolution.y/720.);glow+=texture(uTexture,uv+off*4.).rgb*.5+texture(uTexture,uv+off*12.).rgb*.3+texture(uTexture,uv+off*28.).rgb*.2;}col+=glow*uBloom/12.;col=vec3(1.)-exp(-col*uExposure);col=pow(col,vec3(.88));float v=length((uv-.5)*1.4);col*=1.-v*v*uVignette;float noise=fract(sin(dot(uv*uResolution,vec2(12.9898,78.233))+floor(uTime*24.))*43758.5453)-.5;col+=noise*uGrain;frag=vec4(max(col,vec3(.012,.014,.023)),1);}`;
 export function orbFragment(source) {
   return `#version 300 es
 precision highp float;

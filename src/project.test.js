@@ -105,14 +105,100 @@ test("orb source selects orb renderer through the same composition chain", () =>
 });
 
 test("project keeps the working shader and an unfinished draft independently", () => {
- const p = fixture(); p.shaderDraft = "unfinished shader edit";
- const loaded = validateProject(JSON.parse(JSON.stringify(p)));
- assert.equal(loaded.shader, defaultShader);
- assert.equal(loaded.shaderDraft, "unfinished shader edit");
+  const p = fixture();
+  p.shaderDraft = "unfinished shader edit";
+  const loaded = validateProject(JSON.parse(JSON.stringify(p)));
+  assert.equal(loaded.shader, defaultShader);
+  assert.equal(loaded.shaderDraft, "unfinished shader edit");
 });
 test("prototype names and duplicate field identifiers are rejected", () => {
- const p = fixture(); p.graph.nodes[0].type = "__proto__";
- assert.throws(() => validateProject(p));
- const q = fixture(); const f = {id:"duplicate", type:"attract",x:0,y:0,strength:1,radius:1,color:"#ffffff"};
- q.fields = [f, {...f}]; assert.throws(() => validateProject(q));
+  const p = fixture();
+  p.graph.nodes[0].type = "__proto__";
+  assert.throws(() => validateProject(p));
+  const q = fixture();
+  const f = {
+    id: "duplicate",
+    type: "attract",
+    x: 0,
+    y: 0,
+    strength: 1,
+    radius: 1,
+    color: "#ffffff",
+  };
+  q.fields = [f, { ...f }];
+  assert.throws(() => validateProject(q));
+});
+
+test("legacy projects acquire new system defaults without changing their custom surface", () => {
+  const p = fixture();
+  p.config = { count: 40000, spin: 0.7 };
+  const restored = validateProject(p);
+  assert.equal(restored.config.family, 0);
+  assert.equal(restored.config.speciesEnabled, 0);
+  assert.equal(restored.config.glassClarity, 0.92);
+  assert.equal(restored.shader, p.shader);
+});
+test("glass containers and interior recipes round trip independently", () => {
+  for (let container = 0; container < 3; container++)
+    for (let interior = 0; interior < 3; interior++) {
+      const p = fixture();
+      p.mode = "glass";
+      Object.assign(p.config, {
+        container,
+        interior,
+        glassThickness: 0.3,
+        interiorScale: 0.7,
+      });
+      assert.deepEqual(validateProject(JSON.parse(JSON.stringify(p))), p);
+    }
+});
+test("material families, chemical parameters and directional species couplings are validated", () => {
+  for (const [key, value] of [
+    ["family", 5],
+    ["container", 0.5],
+    ["interior", -1],
+    ["reactionFeed", 0.2],
+    ["pairAB", 3],
+    ["speciesDragB", NaN],
+  ]) {
+    const p = fixture();
+    p.config[key] = value;
+    assert.throws(() => validateProject(p));
+  }
+  const p = fixture();
+  p.config.pairAB = -1;
+  p.config.pairBA = 0.5;
+  const loaded = validateProject(p);
+  assert.equal(loaded.config.pairAB, -1);
+  assert.equal(loaded.config.pairBA, 0.5);
+});
+test("glass is a peer source in the node composer", () => {
+  const p = fixture();
+  p.graph.nodes[0].type = "glass";
+  p.mode = "nodes";
+  assert.equal(resolveGraph(validateProject(p).graph, p.config).mode, "glass");
+});
+
+test("composed shader families round trip and reject invalid operators", () => {
+  const p = fixture();
+  p.config.family = 4;
+  p.config.fieldA = 3;
+  p.config.fieldB = 2;
+  p.config.fieldOperation = 3;
+  p.config.fieldWidth = 0.04;
+  const restored = validateProject(JSON.parse(JSON.stringify(p)));
+  assert.equal(restored.config.family, 4);
+  assert.equal(restored.config.fieldOperation, 3);
+  assert.equal(restored.config.fieldWidth, 0.04);
+  for (const [key, value] of [
+    ["fieldA", 4],
+    ["fieldB", 0.5],
+    ["fieldOperation", -1],
+    ["fieldWidth", 0],
+    ["fieldMix", NaN],
+  ]) {
+    const invalid = fixture();
+    invalid.config[key] = value;
+    assert.throws(() => validateProject(invalid));
+  }
 });

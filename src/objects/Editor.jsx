@@ -1,0 +1,518 @@
+import LayerControls from "./LayerControls.jsx";
+import { layerDefaults } from "./layers.js";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  newObject,
+  MAX_OBJECTS,
+  validateObjects,
+  objectOptics,
+} from "./model.js";
+export default function ObjectEditor({
+  objects,
+  onChange,
+  selected,
+  onSelect,
+  notify,
+}) {
+  const input = useRef(),
+    worker = useRef();
+  const [busy, setBusy] = useState(false),
+    [message, setMessage] = useState("");
+  useEffect(() => () => worker.current?.terminate(), []);
+  useEffect(() => {
+    if (worker.current) {
+      worker.current.terminate();
+      worker.current = null;
+      setBusy(false);
+      setMessage("Processing cancelled because the scene changed.");
+    }
+  }, [objects]);
+  const selectedItem = objects.find((o) => o.id === selected);
+  const current = selectedItem ? { ...objectOptics, ...selectedItem } : null;
+  const update = (key, value) =>
+    onChange(
+      objects.map((o) => (o.id === selected ? { ...o, [key]: value } : o)),
+    );
+  function process(data, done) {
+    worker.current?.terminate();
+    setBusy(true);
+    setMessage("Preparing geometry…");
+    const w = new Worker(new URL("./import.worker.js", import.meta.url), {
+      type: "module",
+    });
+    worker.current = w;
+    w.onmessage = ({ data: result }) => {
+      w.terminate();
+      worker.current = null;
+      setBusy(false);
+      if (result.error) {
+        setMessage(result.error);
+        return;
+      }
+      setMessage("");
+      try {
+        done(result);
+      } catch (e) {
+        setMessage(e.message);
+      }
+    };
+    w.onerror = () => {
+      w.terminate();
+      worker.current = null;
+      setBusy(false);
+      setMessage("Could not process this mesh. Check the file and try again.");
+    };
+    w.postMessage(data, data.buffer ? [data.buffer] : []);
+  }
+  function addObject(name, result) {
+    const object = newObject(
+      name,
+      result.triangles,
+      result.points,
+      result.info,
+    );
+    try {
+      const next = [...objects, object];
+      validateObjects(next);
+      onChange(next);
+      onSelect(object.id);
+      notify("Object added. Choose glass, surface dots, or filled volume.");
+    } catch (e) {
+      setMessage(e.message);
+    }
+  }
+  function addPrimitive(kind) {
+    if (busy || objects.length >= MAX_OBJECTS) return;
+    process({ primitive: kind }, (result) =>
+      addObject(`Glass ${kind}`, result),
+    );
+  }
+  async function importFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (objects.length >= MAX_OBJECTS) {
+      setMessage("Eight objects maximum. Remove an object before importing.");
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      setMessage("Choose a mesh under 20 MB, with at most 50,000 triangles.");
+      return;
+    }
+    try {
+      const buffer = await file.arrayBuffer();
+      process({ buffer, name: file.name }, (result) => {
+        addObject(file.name, result);
+      });
+    } catch (e) {
+      setMessage(e.message);
+    }
+  }
+  function addLayers() {
+    if (!current || objects.length >= MAX_OBJECTS) return;
+    const shell = current;
+    process(
+      {
+        triangles: shell.triangles,
+        role: "layers",
+        layerSettings: layerDefaults,
+      },
+      (result) => {
+        const layer = {
+          ...newObject(
+            `${shell.name} strata`,
+            result.triangles,
+            result.points,
+            result.info,
+            "layers",
+          ),
+          layerSettings: { ...layerDefaults },
+          pointLimits: Array.from(result.limits),
+          billow: 0.06,
+          position: [...shell.position],
+          rotation: [...shell.rotation],
+          scale: [...shell.scale],
+          color: "#348ca9",
+          colorTop: "#ff3c0c",
+          gradient: 1,
+          opacity: 0.8,
+          emission: 3.2,
+          pointSize: 1.6,
+        };
+        try {
+          validateObjects([...objects, layer]);
+          onChange([...objects, layer]);
+          onSelect(layer.id);
+          notify("Strata added inside the selected form.");
+        } catch (e) {
+          setMessage(e.message);
+        }
+      },
+    );
+  }
+  function replaceGeometry(next) {
+    validateObjects(next);
+    onChange(next);
+  }
+  function buildLayers(settings) {
+    process(
+      { triangles: current.triangles, role: "layers", layerSettings: settings },
+      (result) => {
+        replaceGeometry(
+          objects.map((o) =>
+            o.id === current.id
+              ? {
+                  ...o,
+                  role: "layers",
+                  layerSettings: settings,
+                  pointLimits: Array.from(result.limits),
+                  points: Array.from(result.points),
+                  info: result.info,
+                }
+              : o,
+          ),
+        );
+        notify("Terrain layers rebuilt.");
+      },
+    );
+  }
+  function role(next) {
+    if (next === "layers") {
+      buildLayers(current.layerSettings ?? layerDefaults);
+      return;
+    }
+    if (next === "glass") {
+      update("role", next);
+      return;
+    }
+    const id = current.id;
+    process({ triangles: current.triangles, role: next }, (result) => {
+      replaceGeometry(
+        objects.map((o) =>
+          o.id === id
+            ? {
+                ...o,
+                role: next,
+                pointLimits: undefined,
+                points: Array.from(result.points),
+                info: result.info,
+                opacity: next === "volume" ? 0.5 : 0.6,
+              }
+            : o,
+        ),
+      );
+    });
+  }
+  function duplicate() {
+    if (!current || objects.length >= MAX_OBJECTS) return;
+    const copy = {
+      ...current,
+      id: crypto.randomUUID(),
+      name: `${current.name.slice(0, 70)} copy`,
+      position: [...current.position],
+      rotation: [...current.rotation],
+      scale: [...current.scale],
+    };
+    try {
+      validateObjects([...objects, copy]);
+      onChange([...objects, copy]);
+      onSelect(copy.id);
+    } catch (e) {
+      setMessage(e.message);
+    }
+  }
+  const range = (key, label, min, max, step) => (
+    <label
+      className="object-slider"
+      key={key}
+      title={
+        {
+          thickness:
+            "Scales measured front-to-back depth for refraction and absorption. Try 0.1 for thin glass; 0.5 for a heavy optical form.",
+          dispersion:
+            "Separates red and blue refraction slightly. Small values give spectral edges; large values deliberately exaggerate them.",
+          studioLight:
+            "Brightness of the reflected studio lights. Clear glass needs something bright to reflect.",
+          absorption:
+            "How strongly the tint filters transmitted light. Thick regions absorb more.",
+          roughness:
+            "Softens studio reflections and blurs the transmitted interior. Keep low for crisp dots.",
+          billow:
+            "Vertical motion amplitude. Each dot is clamped to its original interior interval, including imported closed meshes. Rebuild older layers to enable motion.",
+          flow: "Speed of terrain motion, traveling light, and sparkle animation. Zero pauses the flow.",
+          gradient:
+            "Blends the lower and upper dot colors using height inside the original mesh.",
+          sparkles:
+            "Adds rare bright accents without increasing the brightness of every dot.",
+        }[key]
+      }
+    >
+      <span>
+        {label}
+        <output>{current[key]}</output>
+      </span>
+      <input
+        aria-label={label}
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={current[key]}
+        onChange={(e) => update(key, +e.target.value)}
+      />
+    </label>
+  );
+  return (
+    <section className="object-editor">
+      <div className="object-editor-title">
+        <span className="eyebrow">YOUR GEOMETRY / YOUR MATERIALS</span>
+        <h2>Object composition</h2>
+        <p>
+          Start with a basic form or import a mesh. Give each object its own
+          material.
+        </p>
+      </div>
+      <div className="primitive-actions">
+        <button
+          disabled={busy || objects.length >= MAX_OBJECTS}
+          onClick={() => addPrimitive("orb")}
+        >
+          + Glass orb
+        </button>
+        <button
+          disabled={busy || objects.length >= MAX_OBJECTS}
+          onClick={() => addPrimitive("cylinder")}
+        >
+          + Glass cylinder
+        </button>
+      </div>
+      <button
+        className="primary-button"
+        disabled={busy || objects.length >= MAX_OBJECTS}
+        onClick={() => input.current.click()}
+      >
+        {busy ? "Processing mesh…" : "+ Import 3D mesh"}
+      </button>
+      <input
+        ref={input}
+        type="file"
+        accept=".obj,.stl"
+        hidden
+        onChange={importFile}
+      />
+      <p className="mesh-formats">
+        OBJ / STL · local processing · 50k triangles per mesh
+      </p>
+      {message && (
+        <p className="mesh-message" role="status">
+          {message}
+        </p>
+      )}
+      <div className="object-stack">
+        {objects.map((o) => (
+          <div
+            className={`object-row ${selected === o.id ? "selected" : ""}`}
+            key={o.id}
+          >
+            <button
+              disabled={busy}
+              aria-pressed={selected === o.id}
+              onClick={() => onSelect(o.id)}
+            >
+              <i style={{ background: o.color }} />
+              <span>
+                {o.name}
+                <small>
+                  {o.role === "glass"
+                    ? "Glass shell"
+                    : o.role === "layers"
+                      ? "Procedural strata"
+                      : o.role === "volume"
+                        ? "Filled dot volume"
+                        : "Surface dots"}{" "}
+                  · {(o.triangles.length / 9).toLocaleString()} triangles
+                </small>
+              </span>
+            </button>
+            <button
+              disabled={busy}
+              aria-label={`${o.visible ? "Hide" : "Show"} ${o.name}`}
+              onClick={() =>
+                onChange(
+                  objects.map((x) =>
+                    x.id === o.id ? { ...x, visible: !x.visible } : x,
+                  ),
+                )
+              }
+            >
+              {o.visible ? "◉" : "○"}
+            </button>
+          </div>
+        ))}
+      </div>
+      {current && (
+        <fieldset disabled={busy} className="object-properties">
+          <label className="material-select">
+            Object name
+            <input
+              aria-label="Object name"
+              maxLength={80}
+              value={current.name}
+              onChange={(e) => update("name", e.target.value)}
+            />
+          </label>
+          <label className="material-select">
+            Material
+            <select
+              aria-label="Object material"
+              value={current.role}
+              onChange={(e) => role(e.target.value)}
+            >
+              <option value="glass">Glass container</option>
+              <option value="surface">Surface dots</option>
+              <option value="volume">Filled volume dots</option>
+              <option value="layers">Procedural strata</option>
+            </select>
+          </label>
+          {current.role === "glass" && (
+            <button
+              className="primary-button"
+              disabled={busy || objects.length >= MAX_OBJECTS}
+              onClick={addLayers}
+            >
+              + Design inner layers
+            </button>
+          )}
+          {current.role === "layers" && (
+            <LayerControls object={current} busy={busy} onBuild={buildLayers} />
+          )}
+          <p className="mesh-formats">
+            {current.role === "layers"
+              ? "Independent dot sheets, clipped to the source mesh. Rebuild after changing terrain controls."
+              : current.role === "surface"
+                ? "Dots follow the imported surface. Open meshes are supported."
+                : current.role === "volume"
+                  ? "Dots occupy the interior of the closed mesh."
+                  : "Geometry defines the shell. Reflection and screen-space refraction reveal objects behind it."}
+          </p>
+          <label className="object-color">
+            {current.role === "glass" ? "Glass tint" : "Dot color"}
+            <input
+              type="color"
+              aria-label="Object color"
+              value={current.color}
+              onChange={(e) => update("color", e.target.value)}
+            />
+          </label>
+          {current.role === "glass" ? (
+            <>
+              {range("opacity", "Glass density", 0, 1, 0.01)}
+              {range("ior", "Refraction", 1, 2.5, 0.01)}
+              {range("roughness", "Roughness", 0, 1, 0.01)}
+              {range("thickness", "Optical thickness", 0.01, 1, 0.01)}
+              {range("dispersion", "Spectral dispersion", 0, 0.2, 0.005)}
+              {range("absorption", "Tint absorption", 0, 3, 0.05)}
+              {range("studioLight", "Studio light", 0, 5, 0.05)}
+            </>
+          ) : (
+            <>
+              {range("emission", "Dot brightness", 0, 5, 0.05)}
+              {range("pointSize", "Dot size", 0.5, 6, 0.1)}
+              {range("opacity", "Dot opacity", 0, 1, 0.01)}
+              <label className="object-color">
+                Upper color
+                <input
+                  aria-label="Upper dot color"
+                  type="color"
+                  value={current.colorTop}
+                  onChange={(e) => update("colorTop", e.target.value)}
+                />
+              </label>
+              {range("gradient", "Height color blend", 0, 1, 0.01)}
+              {range("flow", "Flow speed", 0, 2, 0.01)}
+              {current.role === "layers" &&
+                range("billow", "Terrain billow", 0, 0.2, 0.005)}
+              {range("sparkles", "Sparkle accents", 0, 1, 0.01)}
+            </>
+          )}
+          {["position", "rotation", "scale"].map((key) => (
+            <div className="object-transform" key={key}>
+              <span>
+                {key === "position"
+                  ? "Position"
+                  : key === "rotation"
+                    ? "Rotation · degrees"
+                    : "Scale"}
+              </span>
+              <div>
+                {["X", "Y", "Z"].map((axis, i) => (
+                  <label key={axis}>
+                    {axis}
+                    <input
+                      type="number"
+                      aria-label={`${key} ${axis}`}
+                      min={
+                        key === "scale" ? 0.05 : key === "rotation" ? -360 : -4
+                      }
+                      max={key === "scale" ? 4 : key === "rotation" ? 360 : 4}
+                      step={key === "rotation" ? 5 : 0.05}
+                      value={current[key][i]}
+                      onChange={(e) => {
+                        if (e.target.value === "") return;
+                        const min =
+                            key === "scale"
+                              ? 0.05
+                              : key === "rotation"
+                                ? -360
+                                : -4,
+                          max = key === "rotation" ? 360 : 4;
+                        update(
+                          key,
+                          current[key].map((v, j) =>
+                            i === j
+                              ? Math.max(min, Math.min(max, +e.target.value))
+                              : v,
+                          ),
+                        );
+                      }}
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+          <div className="object-actions">
+            <button
+              disabled={objects.length >= MAX_OBJECTS}
+              onClick={duplicate}
+            >
+              Duplicate object
+            </button>
+            <button
+              onClick={() => {
+                onChange(objects.filter((o) => o.id !== current.id));
+                onSelect(objects.find((o) => o.id !== current.id)?.id || null);
+                notify("Object removed. Undo restores it.");
+              }}
+            >
+              Remove
+            </button>
+          </div>
+        </fieldset>
+      )}
+      {!objects.length && (
+        <div className="object-empty">
+          <span>01 / CREATE</span>
+          <p>Add a basic form or import your own model.</p>
+          <span>02 / COMBINE</span>
+          <p>
+            Import a different mesh, or duplicate the first and change its
+            material.
+          </p>
+          <span>03 / COMPOSE</span>
+          <p>Scale, move, rotate, and tune each object independently.</p>
+        </div>
+      )}
+    </section>
+  );
+}

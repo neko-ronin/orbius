@@ -1,3 +1,6 @@
+import { validateObjects } from "./objects/model.js";
+import { speciesDefaults, speciesControls } from "./particles/catalog.js";
+import { materialDefaults, materialControls } from "./materials/catalog.js";
 export const palettes = [
   { name: "Ion violet", colors: ["#7050ff", "#bd8aff", "#f5d7ff"] },
   { name: "Solar flare", colors: ["#ff381a", "#ff982e", "#fff1ae"] },
@@ -6,6 +9,8 @@ export const palettes = [
   { name: "Rose gold", colors: ["#b51b7c", "#f590ac", "#ffead0"] },
 ];
 export const defaults = {
+  ...materialDefaults,
+  ...speciesDefaults,
   count: 80000,
   size: 1.7,
   spread: 1.7,
@@ -49,6 +54,8 @@ export const defaults = {
   showScale: 1.5,
 };
 export const controls = {
+  ...materialControls,
+  ...speciesControls,
   count: [
     "Particle count",
     5000,
@@ -306,11 +313,11 @@ export const controls = {
     "GLSL refract index of refraction",
   ],
   reflection: [
-    "Self reflection",
+    "Reflections",
     0,
     1,
     0.05,
-    "Strength of a second ray cast toward the same surface, with an environment fallback. Deep cavities reflect their neighbors.",
+    "Strength of reflected light. Built-in materials reflect the studio environment; the custom surface also traces a secondary ray toward neighboring geometry.",
     "ray marching secondary reflection rays",
   ],
   shadow: [
@@ -453,6 +460,7 @@ export const presets = [
 export const defaultShader = `// Coordinates are in object space; uTime is seconds.\n// Return a signed distance: negative inside, positive outside.\nfloat shape(vec3 p) {\n  float t = uTime * uMorph;\n  vec3 q = p;\n  q.x += 0.13 * sin(p.y * 3.0 + t);\n  float ridges = sin(q.x * uDetail + t)\n    * sin(q.y * uDetail - t * 0.6)\n    * sin(q.z * uDetail + t * 0.3);\n  return length(p) - uRadius + ridges * uDisplace;\n}\n\n// Define surface color; n is the surface normal.\nvec3 pigment(vec3 p, vec3 n) {\n  float band = sin(p.y * 3.5 + p.x * 2.0 + uTime * 0.15 + uHue * 6.283);\n  return mix(uColorA, uColorB, band * 0.5 + 0.5);\n}`;
 export const nodeKinds = {
   particles: { label: "Particle source", category: "SOURCE", color: "#b099ff" },
+  glass: { label: "Glass object", category: "SOURCE", color: "#68cfb8" },
   orb: { label: "Orb source", category: "SOURCE", color: "#b099ff" },
   curl: {
     label: "Curl field",
@@ -509,7 +517,7 @@ export function resolveGraph(graph, config) {
     if (incoming.length > 1) throw Error("Each input accepts one connection.");
     node = graph.nodes.find((n) => n.id === incoming[0]?.[0]);
   }
-  if (!["particles", "orb"].includes(chain[0]?.type))
+  if (!["particles", "orb", "glass"].includes(chain[0]?.type))
     throw Error("Connect a source to the Stage output.");
   for (const n of chain) {
     const param = nodeKinds[n.type]?.param;
@@ -524,7 +532,7 @@ export function resolveGraph(graph, config) {
 export function validateProject(data) {
   if (!data || data.format !== "boast-project" || data.version !== 1)
     throw Error("This is not a supported BOAST project (version 1).");
-  if (!["particles", "orb", "nodes"].includes(data.mode))
+  if (!["particles", "orb", "glass", "nodes"].includes(data.mode))
     throw Error("Unknown workspace.");
   const config = { ...defaults };
   for (const key of Object.keys(defaults)) {
@@ -541,6 +549,18 @@ export function validateProject(data) {
       (!Number.isInteger(value) || value < 0 || value >= palettes.length)
     )
       throw Error("Unknown palette.");
+    if (
+      ["family", "container", "interior"].includes(key) &&
+      (!Number.isInteger(value) ||
+        value < 0 ||
+        value > (key === "family" ? 4 : 2))
+    )
+      throw Error(`Unknown ${key}.`);
+    if (
+      ["fieldA", "fieldB", "fieldOperation"].includes(key) &&
+      !Number.isInteger(value)
+    )
+      throw Error(`Invalid ${key}.`);
     config[key] = value;
   }
   if (typeof data.shader !== "string" || data.shader.length > 20000)
@@ -602,7 +622,7 @@ export function validateProject(data) {
     if (graph.edges.filter((e) => e[1] === n.id).length > 1)
       throw Error("Multiple input connections.");
     if (
-      ["particles", "orb"].includes(n.type) &&
+      ["particles", "orb", "glass"].includes(n.type) &&
       graph.edges.some((e) => e[1] === n.id)
     )
       throw Error("Source cannot have input.");
@@ -646,6 +666,9 @@ export function validateProject(data) {
       : {}),
     graph: structuredClone(graph),
     fields: structuredClone(fields),
+    ...(data.objects !== undefined
+      ? { objects: validateObjects(data.objects) }
+      : {}),
   };
 }
 export function download(blob, name) {
