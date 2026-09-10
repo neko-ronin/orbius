@@ -2,10 +2,10 @@ import { validateLayers, layerDefaults } from "./layers.js";
 import { MAX_TRIANGLES, MAX_POINTS } from "./geometry.js";
 export const objectOptics = {
   billow: 0,
-  thickness: 0.18,
-  dispersion: 0.035,
-  studioLight: 1.7,
-  absorption: 0.3,
+  thickness: 0.3,
+  dispersion: 0.03,
+  studioLight: 2.2,
+  absorption: 0.25,
   gradient: 0,
   flow: 0.25,
   sparkles: 0.08,
@@ -26,9 +26,9 @@ export function newObject(name, triangles, points, info, role = "glass") {
     rotation: [0, 0, 0],
     scale: [1, 1, 1],
     color: role === "glass" ? "#bce8de" : "#69ffc1",
-    opacity: 0.22,
-    ior: 1.35,
-    roughness: 0.12,
+    opacity: 0.16,
+    ior: 1.45,
+    roughness: 0.06,
     emission: 1.7,
     pointSize: 2,
   };

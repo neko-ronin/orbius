@@ -2352,6 +2352,22 @@ input[type="color"] {
   padding: 11px 6px;
   font-size: 11px;
 }
+.finish-eyebrow {
+  display: block;
+  margin: 18px 0 0;
+  color: #bed5c9;
+  letter-spacing: 0.12em;
+  font-size: 9px;
+}
+.glass-finishes {
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.glass-finishes button {
+  padding: 9px 2px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
 
 .layer-designer,
 .family-designer {

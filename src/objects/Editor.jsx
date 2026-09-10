@@ -7,6 +7,57 @@ import {
   validateObjects,
   objectOptics,
 } from "./model.js";
+// Coordinated optical settings; each is a whole finish, not one slider.
+const glassFinishes = [
+  [
+    "Clear",
+    {
+      ior: 1.45,
+      roughness: 0.04,
+      thickness: 0.28,
+      dispersion: 0.02,
+      absorption: 0.18,
+      opacity: 0.12,
+      studioLight: 2.3,
+    },
+  ],
+  [
+    "Frosted",
+    {
+      ior: 1.4,
+      roughness: 0.6,
+      thickness: 0.34,
+      dispersion: 0.01,
+      absorption: 0.5,
+      opacity: 0.3,
+      studioLight: 2,
+    },
+  ],
+  [
+    "Prism",
+    {
+      ior: 1.8,
+      roughness: 0.05,
+      thickness: 0.45,
+      dispersion: 0.05,
+      absorption: 0.25,
+      opacity: 0.14,
+      studioLight: 2.7,
+    },
+  ],
+  [
+    "Smoked",
+    {
+      ior: 1.5,
+      roughness: 0.16,
+      thickness: 0.65,
+      dispersion: 0.03,
+      absorption: 1.6,
+      opacity: 0.55,
+      studioLight: 1.7,
+    },
+  ],
+];
 export default function ObjectEditor({
   objects,
   onChange,
@@ -76,7 +127,7 @@ export default function ObjectEditor({
       validateObjects(next);
       onChange(next);
       onSelect(object.id);
-      notify("Object added. Choose glass, surface dots, or filled volume.");
+      notify("Object added. Pick an optical finish, or design inner layers.");
     } catch (e) {
       setMessage(e.message);
     }
@@ -406,6 +457,23 @@ export default function ObjectEditor({
           </label>
           {current.role === "glass" ? (
             <>
+              <span className="eyebrow finish-eyebrow">OPTICAL FINISH</span>
+              <div className="primitive-actions glass-finishes">
+                {glassFinishes.map(([label, values]) => (
+                  <button
+                    key={label}
+                    onClick={() =>
+                      onChange(
+                        objects.map((o) =>
+                          o.id === selected ? { ...o, ...values } : o,
+                        ),
+                      )
+                    }
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               {range("opacity", "Glass density", 0, 1, 0.01)}
               {range("ior", "Refraction", 1, 2.5, 0.01)}
               {range("roughness", "Roughness", 0, 1, 0.01)}

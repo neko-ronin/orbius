@@ -203,7 +203,9 @@ export function surfacePoints(triangles, count = 30000) {
   }
   return points;
 }
-export function meshColumns(triangles, resolution = 48) {
+// `offsets` holds the in-cell sample fraction pair for each column, so callers that
+// place points off the cell centre rasterize the ray they actually sample.
+export function meshColumns(triangles, resolution = 48, offsets = null) {
   if (!meshInfo(triangles).closed)
     throw Error(
       "Filled volume needs a closed, manifold mesh. Use Surface dots for this object, or close the mesh in your modeler.",
@@ -230,8 +232,9 @@ export function meshColumns(triangles, resolution = 48) {
       );
     for (let y = y0; y <= y1; y++)
       for (let z = z0; z <= z1; z++) {
-        const py = -1 + (y + 0.5031) * step,
-          pz = -1 + (z + 0.5073) * step;
+        const cell = (y * resolution + z) * 2;
+        const py = -1 + (y + (offsets ? offsets[cell] : 0.5031)) * step,
+          pz = -1 + (z + (offsets ? offsets[cell + 1] : 0.5073)) * step;
         const u =
           ((b[2] - c[2]) * (py - c[1]) + (c[1] - b[1]) * (pz - c[2])) /
           denominator;

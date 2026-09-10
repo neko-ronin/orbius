@@ -1128,8 +1128,8 @@ function App() {
                 ? [
                     ["Camera", ["zoom", "tilt", "rotation", "autoRotate"]],
                     [
-                      "Scene finish",
-                      ["bloom", "exposure", "grain", "vignette"],
+                      "Studio & finish",
+                      ["backdrop", "bloom", "exposure", "grain", "vignette"],
                     ],
                     ["Render quality", ["devScale", "showScale"]],
                   ]

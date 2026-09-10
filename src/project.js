@@ -52,10 +52,19 @@ export const defaults = {
   orbMorph: 0.4,
   devScale: 0.7,
   showScale: 1.5,
+  backdrop: 0.55,
 };
 export const controls = {
   ...materialControls,
   ...speciesControls,
+  backdrop: [
+    "Studio backdrop",
+    0,
+    1,
+    0.01,
+    "Brightness of the studio sweep behind the objects. Glass needs something to refract; zero returns to black space for dark, dendrite-style compositions.",
+    "studio sweep lighting photography glass",
+  ],
   count: [
     "Particle count",
     5000,

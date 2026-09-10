@@ -13,7 +13,7 @@ import {
   surfacePoints,
   volumePoints,
 } from "./geometry.js";
-import { newObject, validateObjects } from "./model.js";
+import { newObject, validateObjects, objectOptics } from "./model.js";
 import {
   validateProject,
   defaults,
@@ -205,7 +205,7 @@ test("legacy objects acquire optics defaults and reject malformed new material p
     {},
   );
   delete object.thickness;
-  assert.equal(validateObjects([object])[0].thickness, 0.18);
+  assert.equal(validateObjects([object])[0].thickness, objectOptics.thickness);
   for (const value of [
     { dispersion: 5 },
     { colorTop: "bad" },

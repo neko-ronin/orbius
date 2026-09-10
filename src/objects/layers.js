@@ -103,13 +103,25 @@ export function layerGeometry(triangles, options) {
   const swapped = Float32Array.from(triangles);
   for (let i = 0; i < swapped.length; i += 3)
     [swapped[i], swapped[i + 1]] = [swapped[i + 1], swapped[i]];
-  const columns = meshColumns(swapped, n),
+  const jitter = (a, b) => {
+    const v = Math.sin(a * 127.1 + b * 311.7 + s.seed * 74.7) * 43758.5453;
+    return v - Math.floor(v);
+  };
+  // Jitter inside each cell so sheets read as fine grains, not a wireframe grid.
+  // The rasterizer samples the same offsets, so every point keeps its own interval.
+  const offsets = new Float32Array(n * n * 2);
+  for (let i = 0; i < n; i++)
+    for (let j = 0; j < n; j++) {
+      offsets[(i * n + j) * 2] = 0.16 + jitter(i, j) * 0.68;
+      offsets[(i * n + j) * 2 + 1] = 0.16 + jitter(j + 131, i) * 0.68;
+    }
+  const columns = meshColumns(swapped, n, offsets),
     result = [],
     limits = [];
   for (let i = 0; i < n; i++)
     for (let j = 0; j < n; j++) {
-      const x = -1 + (i + 0.5031) * step,
-        z = -1 + (j + 0.5073) * step;
+      const x = -1 + (i + offsets[(i * n + j) * 2]) * step,
+        z = -1 + (j + offsets[(i * n + j) * 2 + 1]) * step;
       const a = x * s.frequency * 3 + s.seed * 0.73,
         b = z * s.frequency * 3;
       const w = a + s.twist * Math.sin(b * 0.7);
