@@ -1270,7 +1270,14 @@ function App() {
                     ["Render quality", ["devScale", "showScale"]],
                   ]
                 : resolved.mode === "orb" && config.family > 0
-                  ? materialSections.orb
+                  ? [
+                      ...materialSections.orb.slice(0, 2),
+                      ...lightRoles.map(([id, label]) => [
+                        `${label} light`,
+                        lightKeys[id],
+                      ]),
+                      ...materialSections.orb.slice(2),
+                    ]
                   : sections[resolved.mode === "orb" ? "orb" : "particles"]
               ).map(([title, keys], i) => (
                 <details key={title} open={i < 2}>

@@ -1,5 +1,6 @@
 import { materialFragment } from "./fragment.js";
 import { quadVertex } from "../shaders.js";
+import { lightRig } from "../project.js";
 // Export only the authored volume path; no chemistry sampler or built-in families.
 export function exportFamily(config, colors) {
   let fragment = materialFragment;
@@ -10,7 +11,12 @@ export function exportFamily(config, colors) {
     .replace("uniform sampler2D uChemistry;", "")
     .replace("uniform int uFamily,uSteps;", "uniform int uSteps;")
     .replace(" if(uFamily==4){", " {");
+  // The rig travels with the bundle, resolved at t=0: the shader now reads these
+  // arrays, so an export without them would compile and render black.
+  const rig = lightRig(config, 0);
   const uniforms = {
+    "uLightDir[0]": Array.from(rig.direction),
+    "uLightColor[0]": Array.from(rig.color),
     uResolution: [1280, 720],
     uTime: 0,
     uSteps: 160,
@@ -49,6 +55,6 @@ export function exportFamily(config, colors) {
     uniforms,
     config,
     contract:
-      "WebGL2 fullscreen triangle (drawArrays TRIANGLES, 0, 3), no vertex attributes or textures. uSteps is int; other scalar uniforms are float. uTime is seconds; uResolution is framebuffer pixels. Colors are normalized RGB. Output is linear HDR before exposure, bloom and tone mapping. This integration bundle is not a BOAST project: use Save in BOAST for a project that can be reopened.",
+      "WebGL2 fullscreen triangle (drawArrays TRIANGLES, 0, 3), no vertex attributes or textures. uLightDir and uLightColor are vec4[3] studio lights: xyz is a world direction and w the softbox width; rgb is premultiplied colour and a the softbox height. uSteps is int; other scalar uniforms are float. uTime is seconds; uResolution is framebuffer pixels. Colors are normalized RGB. Output is linear HDR before exposure, bloom and tone mapping. This integration bundle is not a BOAST project: use Save in BOAST for a project that can be reopened.",
   };
 }

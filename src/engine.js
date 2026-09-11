@@ -14,7 +14,7 @@ import {
   compositeFragment,
   orbFragment,
 } from "./shaders.js";
-import { palettes, defaultShader } from "./project.js";
+import { palettes, defaultShader, lightRig } from "./project.js";
 const rgb = (hex) =>
   [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
 const fieldTypes = ["attract", "repel", "vortex", "light", "burst", "freeze"];
@@ -416,6 +416,13 @@ export class Engine {
     };
     // Particles project through the enclosure's camera while they are inside it,
     // so a point and a mesh vertex at the same place land on the same pixel.
+    // One rig per frame, bound to whichever program draws. Glass resolves its own
+    // inside ObjectRenderer; orb and material take it here.
+    const rig = lightRig(c, this.time);
+    const bindRig = (program) => {
+      this.uniform(program, "uLightDir[0]", rig.direction, "v4");
+      this.uniform(program, "uLightColor[0]", rig.color, "v4");
+    };
     const camera =
       this.mode === "glass"
         ? { uEye: 4, uProjScale: 2.5 }
@@ -554,8 +561,9 @@ export class Engine {
         );
       }
       this.uniform(this.material, "uChemistry", 1, "int");
+      bindRig(this.material);
       this.uniform(this.material, "uSteps", this.show ? 160 : 88, "int");
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      this.timer.span("material", () => gl.drawArrays(gl.TRIANGLES, 0, 3));
     } else if (this.mode === "orb") {
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.targets[this.trailRead].fb);
       gl.bindVertexArray(this.emptyVAO);
@@ -578,7 +586,8 @@ export class Engine {
         uKeyLight: c.keyLight,
       });
       this.uniform(this.orb, "uSteps", this.show ? 192 : 80, "int");
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      bindRig(this.orb);
+      this.timer.span("orb", () => gl.drawArrays(gl.TRIANGLES, 0, 3));
     } else {
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.targets[this.trailRead].fb);
       gl.clearColor(0, 0, 0, 1);

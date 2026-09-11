@@ -1,3 +1,4 @@
+import { studioRig } from "./lighting.js";
 export const quadVertex = `#version 300 es
 precision highp float;
 out vec2 uv;
@@ -121,12 +122,12 @@ ${source}
 mat3 rot(){float c=cos(uRotation),s=sin(uRotation);return mat3(c,0,-s,0,1,0,s,0,c);}
 float map(vec3 p){p=rot()*p;float a=p.y*uTwist*.18;float c=cos(a),s=sin(a);p.xz=mat2(c,-s,s,c)*p.xz;p+=sin(p.yzx*uFrequency+uTime*.15)*uTurbulence*.08;return shape(p);}
 vec3 normal(vec3 p){vec2 e=vec2(.0015,0);return normalize(vec3(map(p+e.xyy)-map(p-e.xyy),map(p+e.yxy)-map(p-e.yxy),map(p+e.yyx)-map(p-e.yyx)));}
-vec3 environment(vec3 d){float band=pow(max(0.,sin(d.y*4.+d.x*2.)),10.);return mix(uColorA*.1,uColorC*.5,band)+vec3(.05,.07,.1)*max(d.y,0.);}
+${studioRig}
 float march(vec3 ro,vec3 rd,int limit){float t=.008,best=100.,closest=t;float bound=uRadius+uDisplace+.35;float b=dot(ro,rd),disc=b*b-dot(ro,ro)+bound*bound;if(disc<0.)return -1.;t=max(t,-b-sqrt(disc));float safe=.85/(1.+abs(uDisplace*uDetail)*1.75+abs(uTwist)*.4+uTurbulence*uFrequency*.4);for(int i=0;i<192;i++){if(i>=limit)break;float d=map(ro+rd*t);if(abs(d)<best){best=abs(d);closest=t;}if(abs(d)<max(.0015,t*(uSteps>100?.00035:.001)))return t;t+=max(abs(d)*safe,.0007);if(t>8.)break;}return best<(uSteps>100?.005:.012)?closest:-1.;}
 float softShadow(vec3 p,vec3 l){float t=.025,shade=1.;for(int i=0;i<64;i++){if(i>=uSteps/3)break;float h=map(p+l*t);shade=min(shade,10.*max(h,0.)/t);t+=clamp(h*.5,.012,.12);if(h<.001||t>4.)break;}return clamp(shade,0.,1.);}
 void main(){vec2 st=(uv-.5)*vec2(uResolution.x/uResolution.y,1.)*2.;vec3 ro=vec3(0.,sin(uTilt-.65)*1.2,3.7/uZoom);vec3 forward=normalize(-ro);vec3 right=normalize(cross(forward,vec3(0,1,0)));vec3 up=cross(right,forward);vec3 rd=normalize(forward*1.8+st.x*right+st.y*up);float t=march(ro,rd,uSteps);vec3 col=vec3(.006,.007,.012);
- if(t>0.){vec3 p=ro+rd*t,n=normal(p),l=normalize(vec3(-2.5,3.,4.));vec3 base=pigment(rot()*p,rot()*n);float diffuse=max(dot(n,l),0.);float shadow=mix(1.,softShadow(p+n*.01,l),uShadow);float ao=1.;for(int i=1;i<=4;i++){float h=float(i)*.06;ao-=(h-map(p+n*h))*.9;}ao=clamp(ao,.15,1.);float spec=pow(max(dot(n,normalize(l-rd)),0.),mix(180.,4.,uRoughness));float fres=pow(1.-max(dot(-rd,n),0.),3.);col=base*(uAmbient*ao+diffuse*shadow*uKeyLight*.38);col+=mix(vec3(1.),base,uMetallic)*spec*shadow*uKeyLight;
- vec3 reflected=reflect(rd,n);vec3 refl=environment(reflected);if(uReflection>0.){float rt=march(p+n*.015,reflected,uSteps/2);if(rt>0.){vec3 rp=p+n*.015+reflected*rt;refl=pigment(rot()*rp,rot()*normal(rp))*.55;}}col+=refl*(.15+fres)*uReflection;
+ if(t>0.){vec3 p=ro+rd*t,n=normal(p),l=uLightDir[0].xyz;vec3 base=pigment(rot()*p,rot()*n);float diffuse=max(dot(n,l),0.);float shadow=mix(1.,softShadow(p+n*.01,l),uShadow);float ao=1.;for(int i=1;i<=4;i++){float h=float(i)*.06;ao-=(h-map(p+n*h))*.9;}ao=clamp(ao,.15,1.);float spec=pow(max(dot(n,normalize(l-rd)),0.),mix(180.,4.,uRoughness));float fres=pow(1.-max(dot(-rd,n),0.),3.);col=base*(uAmbient*ao+diffuse*shadow*uKeyLight*.38);col+=mix(vec3(1.),base,uMetallic)*spec*shadow*uKeyLight;
+ vec3 reflected=reflect(rd,n);vec3 refl=envLight(reflected,uRoughness);if(uReflection>0.){float rt=march(p+n*.015,reflected,uSteps/2);if(rt>0.){vec3 rp=p+n*.015+reflected*rt;refl=pigment(rot()*rp,rot()*normal(rp))*.55;}}col+=refl*(.15+fres)*uReflection;
  vec3 refracted=refract(rd,n,1./uIor);vec3 inside=p+refracted*uRadius*1.6;col+=pigment(rot()*inside,n)*(1.-uMetallic)*.15;col+=uColorB*pow(1.-abs(dot(n,rd)),4.)*.3;
  }frag=vec4(col,1.);
 }`;
