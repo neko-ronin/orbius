@@ -6,7 +6,7 @@ import {
   initialGraph,
   validateProject,
   resolveGraph,
-  fitSimulation,
+  conformSimulation,
   controls,
 } from "./project.js";
 import { newObject } from "./objects/model.js";
@@ -236,31 +236,51 @@ test("a contained particle simulation names a glass shell and survives a round t
   assert.equal(validateProject(fixture()).particleContainer, undefined);
 });
 
-test("a loaded simulation is rescaled to its enclosure instead of crushed", () => {
-  const big = {
+test("a loaded simulation is authored for the enclosure it is poured into", () => {
+  const saved = {
     ...defaults,
     spread: 2.4,
     depth: 1.2,
     turbulence: 1.2,
     frequency: 1.4,
+    drag: 1.6,
+    spin: 0.9,
+    life: 11,
+    count: 44000,
   };
-  const fitted = fitSimulation(big, [1, 1, 1]);
-  assert.ok(fitted.spread < big.spread, "emitter shrinks to the shell");
-  assert.ok(fitted.depth < big.depth);
+  const tall = { center: [0, 0, 0], extent: [0.8, 0.98, 0.8], fill: 0.5 };
+  const vessel = conformSimulation(saved, tall, [1, 1, 1]);
+  // The emitter spans the vessel and keeps the flatness it was authored with.
+  assert.ok(vessel.spread <= 0.81);
   assert.ok(
-    fitted.turbulence < big.turbulence,
-    "accelerations shrink with length",
+    Math.abs(vessel.depth / vessel.spread - saved.depth / saved.spread) < 0.01,
+    "emitter aspect ratio survives the rescale",
   );
-  assert.ok(
-    fitted.frequency > big.frequency,
-    "flow detail rises as the cloud shrinks",
-  );
-  for (const [key, value] of Object.entries(fitted))
+  // Damping is capped: a small vessel with heavy drag settles into a dead block.
+  assert.ok(vessel.drag < saved.drag);
+  // Character carries over untouched.
+  for (const key of ["spin", "life", "count", "palette", "hue", "size"])
+    assert.equal(vessel[key], saved[key]);
+  for (const [key, value] of Object.entries(vessel))
     if (controls[key])
       assert.ok(
         value >= controls[key][1] && value <= controls[key][2],
         `${key} stays inside its control range`,
       );
-  // A larger vessel takes a larger simulation.
-  assert.ok(fitSimulation(big, [3, 3, 3]).spread > fitted.spread);
+  // Eddies are sized to the vessel, so a larger one carries a coarser flow and
+  // needs more energy to cross.
+  const big = conformSimulation(saved, tall, [3, 3, 3]);
+  assert.ok(big.frequency < vessel.frequency);
+  assert.ok(big.turbulence > vessel.turbulence);
+  assert.ok(big.spread > vessel.spread);
+});
+
+test("conforming without a measured interior fails at the boundary", () => {
+  // The worker has to forward the measurement; losing it silently left the
+  // enclosure running whatever config happened to be loaded already.
+  for (const interior of [undefined, null, {}, { extent: [1, 1] }])
+    assert.throws(
+      () => conformSimulation(defaults, interior, [1, 1, 1]),
+      /not measured/,
+    );
 });

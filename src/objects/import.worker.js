@@ -15,8 +15,8 @@ self.onmessage = ({ data }) => {
         ? Float32Array.from(data.triangles)
         : parseMesh(data.buffer, data.name);
     if (data.role === "field") {
-      const { field, resolution } = volumeField(triangles);
-      self.postMessage({ field, resolution }, [field.buffer]);
+      const { field, resolution, interior } = volumeField(triangles);
+      self.postMessage({ field, resolution, interior }, [field.buffer]);
       return;
     }
     const info = meshInfo(triangles);

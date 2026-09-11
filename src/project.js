@@ -73,6 +73,7 @@ export const simulationKeys = [
   "twist",
   "palette",
   "hue",
+  "trail",
   ...Object.keys(speciesDefaults),
 ];
 export const controls = {
@@ -567,23 +568,45 @@ export function resolveGraph(graph, config) {
     active: chain.map((n) => n.id),
   };
 }
-// A saved simulation is authored at stage scale; an enclosure is roughly a unit
-// sphere. Rescale it to the vessel instead of crushing it against the walls:
-// lengths shrink with the emitter, accelerations shrink with them, and the flow
-// field's frequency rises so the pattern keeps its shape relative to the cloud.
-export function fitSimulation(config, scale) {
-  const radius = Math.max(0.05, Math.min(...scale));
+// A saved project's structure comes from its emitter and its free expansion into
+// open space. Walling that in destroys it, so a simulation is not loaded into an
+// enclosure — it is interpreted into one. The enclosure supplies the domain: the
+// flow is re-sized so eddies fit the vessel, damping is capped so the material
+// cannot settle into a dead packed block, and the emitter figures are replaced by
+// the measured interior. Character — spin, lifetime, palette, point size,
+// population, species coupling — carries over untouched.
+export function conformSimulation(config, interior, scale) {
+  if (!interior?.extent || interior.extent.length !== 3)
+    throw Error("The enclosure was not measured; rebuild it and try again.");
   const clamp = (key, value) =>
     Math.min(controls[key][2], Math.max(controls[key][1], value));
-  const spread = clamp("spread", 0.5 * radius);
-  const k = spread / Math.max(0.01, config.spread);
+  // World half-extents of the interior, and the length that stands for the vessel.
+  const extent = interior.extent.map((e, axis) =>
+    Math.max(0.05, e * Math.abs(scale[axis])),
+  );
+  const size = (extent[0] + extent[1] + extent[2]) / 3;
+  const authored = Math.max(0.3, config.spread);
+  // The stage length the project was authored at, mapped to the vessel's.
+  const k = size / authored;
+  const spread = clamp("spread", Math.max(extent[0], extent[2]));
   return {
     ...config,
-    spread,
-    depth: clamp("depth", config.depth * k),
-    turbulence: clamp("turbulence", config.turbulence * k),
+    // The cloud settles where turbulence balances the pull to the middle, so
+    // scaling it by k puts that equilibrium at the vessel's size rather than the
+    // stage's — the authored shape, at the vessel's scale.
+    turbulence: clamp("turbulence", Math.max(0.15, config.turbulence * k)),
     gravity: clamp("gravity", config.gravity * k),
-    frequency: clamp("frequency", config.frequency / k),
+    // Finer flow as the cloud shrinks, and never so coarse that the vessel holds
+    // less than about two turns of it.
+    frequency: clamp("frequency", Math.max(config.frequency / k, 1.8 / size)),
+    drag: clamp("drag", Math.min(config.drag, 0.45)),
+    // Held material re-crosses its own path constantly, so a stage-length trail
+    // smears into fog; keep enough history to draw the filaments and no more.
+    trail: clamp("trail", Math.min(config.trail, 0.7)),
+    // The emitter spans the vessel across and keeps the flatness it was given,
+    // so a disc stays a disc instead of swelling to fill the shell.
+    spread,
+    depth: clamp("depth", (config.depth / authored) * spread),
   };
 }
 export function validateProject(data) {

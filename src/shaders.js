@@ -13,7 +13,7 @@ uniform int uFieldCount;
 uniform vec4 uFields[12];uniform vec4 uFieldExtra[12];
 uniform sampler2D uDensity;uniform vec3 uCouplingA,uCouplingB,uCouplingC,uSpeciesDrag,uSpeciesLift;
 precision highp sampler3D;
-uniform sampler3D uVolume;uniform float uContain,uContainPush,uEye,uProjScale;
+uniform sampler3D uVolume;uniform float uContain,uContainPush,uEye,uProjScale,uVoxel;
 uniform vec3 uContainPos,uContainRot,uContainScale;
 float hash(float n){return fract(sin(n*127.1)*43758.5453);}
 // Matches the enclosure's own model rotation in the object renderer.
@@ -40,11 +40,21 @@ void main(){
  bool held=uContain>.5;
  vec3 home=held?uContainPos:vec3(0.);
  if(age>uLife||length(p-home)>7.){
-  p=held?home+model*(spawnInside(seed)*uContainScale):spawn(seed);
+  // Inside a vessel the emitter is the saved project's own figure, sized to the
+  // interior and clipped to it. Seeding uniformly through the volume instead
+  // would wash every project into the same featureless fog.
+  vec3 born=spawn(seed)/uContainScale;
+  if(occupancy(born)<.8) born=spawnInside(seed);
+  p=held?home+model*(born*uContainScale):spawn(seed);
   if(uSpeciesEnabled>.5)p.y+=(mod(floor(seed),3.)-1.)*.6;age=0.;v=vec3(-p.z,0.,p.x)*uSpin*.3;}
  vec3 q=p*uFrequency;float t=uTime*.2;
  vec3 flow=vec3(cos(q.y+t)+sin(q.z-t),cos(q.z+t)+sin(q.x),cos(q.x-t)+sin(q.y+t));
- vec3 acc=flow*uTurbulence*.3+vec3(-p.z,0,p.x)*uSpin*.18-(p-home)*.055;
+ // The pull to the middle is what holds a cloud in the shape its author gave it;
+ // without it the material random-walks into featureless fog and the vessel just
+ // contains a haze. Keep it, centred on the vessel, and let the walls clip what
+ // reaches them. Spin orbits the vessel too.
+ vec3 offset=p-home;
+ vec3 acc=flow*uTurbulence*.3+vec3(-offset.z,0,offset.x)*uSpin*.18-offset*.055;
  acc.y-=uGravity*.25;
  mat3 cam=camera();vec3 cp=cam*p;
  for(int i=0;i<12;i++){if(i>=uFieldCount)break;vec4 f=uFields[i];vec4 extra=uFieldExtra[i];vec3 target=vec3(f.xy*vec2(uAspect,1.)*(uEye-cp.z)/uZoom/uProjScale,cp.z);vec3 delta=target-cp;float d=length(delta);float fall=exp(-d*d/(extra.x*extra.x));vec3 dir=delta/max(d,.1);vec3 force=vec3(0);int kind=int(f.z);
@@ -58,19 +68,21 @@ void main(){
  if(uSpeciesEnabled>.5){int species=int(mod(floor(seed),3.));vec2 st=p.xz/8.+.5;vec2 pixel=vec2(1./128.,0);vec3 gx=texture(uDensity,st+pixel).rgb-texture(uDensity,st-pixel).rgb;vec3 gz=texture(uDensity,st+pixel.yx).rgb-texture(uDensity,st-pixel.yx).rgb;vec3 weights=species==0?uCouplingA:species==1?uCouplingB:uCouplingC;acc.xz+=clamp(vec2(dot(gx,weights),dot(gz,weights))*4.,vec2(-2.),vec2(2.));acc.y+=uSpeciesLift[species];damping+=uSpeciesDrag[species];}
  v+=acc*uDt;v*=exp(-damping*uDt);p+=v*uDt;
  if(held){
-  // Push back along the softened occupancy gradient, which points into the mesh.
   vec3 local=toLocal(model,p);float inside=occupancy(local);
   if(inside<.5){
-   float h=2./48.;
+   // The occupancy gradient points into the mesh; it is the wall normal.
+   float h=uVoxel;
    vec3 g=vec3(occupancy(local+vec3(h,0,0))-occupancy(local-vec3(h,0,0)),
                occupancy(local+vec3(0,h,0))-occupancy(local-vec3(0,h,0)),
                occupancy(local+vec3(0,0,h))-occupancy(local-vec3(0,0,h)));
-   vec3 dir=dot(g,g)>1e-8?normalize(model*(g/uContainScale)):normalize(home-p+vec3(0,1e-4,0));
-   float depth=.5-inside;
-   v+=dir*uContainPush*(.2+depth*1.6)*uDt*26.;
-   v*=exp(-uDt*6.*depth);
-   // Far outside the blurred band the gradient is flat, so step back in directly.
-   if(inside<=0.) p+=dir*uDt*uContainPush*.6;}}
+   vec3 n=dot(g,g)>1e-9?normalize(model*(g/uContainScale)):normalize(home-p+vec3(0,1e-4,0));
+   // Step back to the surface and bounce off it. A restoring force here would
+   // pack the material against the inside of the shell and stall it; a wall it
+   // rebounds from keeps the interior circulating.
+   p+=n*(.5-inside)*uContainPush*.15;
+   float into=dot(v,n);
+   if(into<0.) v-=n*into*1.55;
+   v*=.94;}}
  vPosition=vec4(p,age);vVelocity=vec4(v,seed);gl_Position=vec4(0);
 }`;
 export const emptyFragment = `#version 300 es

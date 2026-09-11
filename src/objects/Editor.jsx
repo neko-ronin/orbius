@@ -7,7 +7,11 @@ import {
   validateObjects,
   objectOptics,
 } from "./model.js";
-import { validateProject, simulationKeys, fitSimulation } from "../project.js";
+import {
+  validateProject,
+  simulationKeys,
+  conformSimulation,
+} from "../project.js";
 // Coordinated optical settings; each is a whole finish, not one slider.
 const glassFinishes = [
   [
@@ -224,15 +228,17 @@ export default function ObjectEditor({
     }
     const id = current.id;
     process({ triangles: current.triangles, role: "field" }, (result) => {
+      const conformed = conformSimulation(
+        saved.config,
+        result.interior,
+        current.scale,
+      );
       onSimulation({
         container: id,
         field: result.field,
         resolution: result.resolution,
         config: Object.fromEntries(
-          simulationKeys.map((key) => [
-            key,
-            fitSimulation(saved.config, current.scale)[key],
-          ]),
+          simulationKeys.map((key) => [key, conformed[key]]),
         ),
       });
       notify(`${saved.name} is running inside ${current.name}, fitted to it.`);

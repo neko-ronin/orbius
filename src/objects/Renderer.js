@@ -254,6 +254,24 @@ export class ObjectRenderer {
     this.scene = this.colorTarget(g.LINEAR, null);
     this.backDepthBuffer = this.depthRenderbuffer(0);
     this.back = this.colorTarget(g.NEAREST, this.backDepthBuffer);
+    // A contained simulation accumulates into its own faded pair, exactly as the
+    // particle workspace does: the streaks and most of the brightness of a saved
+    // project come from that history, not from a single frame of points.
+    this.trail = [
+      this.colorTarget(g.LINEAR, null),
+      this.colorTarget(g.LINEAR, null),
+    ];
+    this.trailRead = 0;
+    this.clearTrail();
+  }
+  clearTrail() {
+    if (!this.trail) return;
+    const g = this.engine.gl;
+    for (const t of this.trail) {
+      g.bindFramebuffer(g.FRAMEBUFFER, t.fb);
+      g.clearColor(0, 0, 0, 1);
+      g.clear(g.COLOR_BUFFER_BIT);
+    }
   }
   render(objects, config, shared, w, h, target, drawContents) {
     const e = this.engine,
@@ -327,9 +345,29 @@ export class ObjectRenderer {
     objects
       .filter((o) => o.visible && o.role !== "glass")
       .forEach((o) => draw(o, this.dots, true));
-    // A live simulation loaded into an enclosure joins the dots as contents the
-    // shells refract, under the same additive blend.
-    if (drawContents) drawContents();
+    if (drawContents) {
+      // Fade the history, lay this frame's points over it, then add the result to
+      // the scene so the shells refract it alongside the dots.
+      const write = 1 - this.trailRead;
+      g.disable(g.BLEND);
+      g.bindFramebuffer(g.FRAMEBUFFER, this.trail[write].fb);
+      g.bindVertexArray(e.emptyVAO);
+      g.activeTexture(g.TEXTURE0);
+      g.bindTexture(g.TEXTURE_2D, this.trail[this.trailRead].texture);
+      e.set(e.fade, { uFade: config.trail });
+      e.uniform(e.fade, "uTexture", 0, "int");
+      g.drawArrays(g.TRIANGLES, 0, 3);
+      g.enable(g.BLEND);
+      g.blendFunc(g.ONE, g.ONE);
+      drawContents();
+      this.trailRead = write;
+      g.bindFramebuffer(g.FRAMEBUFFER, accumulator);
+      g.bindVertexArray(e.emptyVAO);
+      g.bindTexture(g.TEXTURE_2D, this.trail[this.trailRead].texture);
+      e.set(e.fade, { uFade: 1 });
+      e.uniform(e.fade, "uTexture", 0, "int");
+      g.drawArrays(g.TRIANGLES, 0, 3);
+    }
     g.disable(g.BLEND);
     // Camera-space depth of each origin: the vertex shader tilts, then rotates.
     const cameraZ = (p) =>
@@ -380,7 +418,7 @@ export class ObjectRenderer {
   }
   disposeTarget() {
     const g = this.engine.gl;
-    for (const t of [this.scene, this.back])
+    for (const t of [this.scene, this.back, ...(this.trail || [])])
       if (t) {
         g.deleteTexture(t.texture);
         g.deleteFramebuffer(t.fb);
@@ -392,6 +430,7 @@ export class ObjectRenderer {
     }
     if (this.backDepthBuffer) g.deleteRenderbuffer(this.backDepthBuffer);
     this.scene = this.back = this.accumulator = this.backDepthBuffer = null;
+    this.trail = null;
   }
   dispose() {
     for (const r of this.resources.values()) this.deleteResource(r);

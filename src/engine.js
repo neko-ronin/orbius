@@ -189,6 +189,7 @@ export class Engine {
   }
   clear() {
     this.rendered = false;
+    this.objectsRenderer?.clearTrail();
     const gl = this.gl;
     for (const t of this.targets) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, t.fb);
@@ -341,6 +342,7 @@ export class Engine {
       uContainPos: held ? this.container.position : [0, 0, 0],
       uContainRot: held ? this.container.rotation : [0, 0, 0],
       uContainScale: held ? this.container.scale : [1, 1, 1],
+      uVoxel: 2 / (this.containerResolution || 1),
     });
     this.uniform(prog, "uVolume", 5, "int");
   }

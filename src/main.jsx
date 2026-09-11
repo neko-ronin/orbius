@@ -1245,6 +1245,7 @@ function App() {
                               "spread",
                               "frequency",
                               "life",
+                              "trail",
                             ],
                           ],
                         ]

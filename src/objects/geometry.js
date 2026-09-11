@@ -310,7 +310,7 @@ export function smoothNormals(triangles) {
   });
   return out;
 }
-export const VOLUME_RESOLUTION = 48;
+export const VOLUME_RESOLUTION = 64;
 // Occupancy of the mesh interior on a cube grid, for confining a live particle
 // simulation. Softened by one box-blur pass so the gradient near the wall has a
 // direction to push along instead of a binary step.
@@ -355,5 +355,29 @@ export function volumeField(triangles, resolution = VOLUME_RESOLUTION) {
               total += at(x + dx, y + dy, z + dz);
         field[x + resolution * (y + resolution * z)] = Math.round(total / 27);
       }
-  return { field, resolution };
+  // Measure the interior so a simulation can be authored for this vessel rather
+  // than rescaled by its bounding box: centre and half-extent per axis, in the
+  // mesh's own [-1, 1] local space, plus the fraction of the box it fills.
+  let count = 0;
+  const low = [1, 1, 1],
+    high = [-1, -1, -1],
+    sum = [0, 0, 0];
+  for (let z = 0; z < resolution; z++)
+    for (let y = 0; y < resolution; y++)
+      for (let x = 0; x < resolution; x++) {
+        if (!solid[x + resolution * (y + resolution * z)]) continue;
+        count++;
+        [x, y, z].forEach((n, axis) => {
+          const v = -1 + (n + 0.5) * step;
+          low[axis] = Math.min(low[axis], v);
+          high[axis] = Math.max(high[axis], v);
+          sum[axis] += v;
+        });
+      }
+  const interior = {
+    center: sum.map((n) => n / count),
+    extent: low.map((n, axis) => Math.max(0.02, (high[axis] - n) / 2)),
+    fill: count / size,
+  };
+  return { field, resolution, interior };
 }

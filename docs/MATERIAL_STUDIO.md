@@ -32,21 +32,48 @@ particles run live inside that shell, as contents the glass refracts alongside a
 dots or strata. One enclosure holds a simulation at a time; **Empty this
 enclosure** releases it.
 
-The shell is voxelized into an occupancy grid (48³, one box-blur pass) in the
+The shell is voxelized into an occupancy grid (64³, one box-blur pass) in the
 import worker. The solver samples that grid in local space each step and pushes
-escaping particles back along its gradient, so concave and imported meshes confine
+escaping particles back across it: the wall is a surface they rebound from, not a
+spring they pile against, so concave and imported meshes confine
 correctly, not just a fitted sphere. **Containment force** under Contained
 simulation sets how hard. Particles seed inside the volume by rejection sampling,
 both on the CPU at reset and on the GPU when one ages out.
 
-A saved simulation is authored at stage scale and an enclosure is roughly a unit
-sphere, so the emitter, its depth, and the accelerations are rescaled to the
-vessel on load, with the flow frequency raised to match — otherwise the cloud is
-simply crushed against the walls. The fitted values are ordinary controls
-afterwards. Placed fields do not travel with the simulation; they are a
-screen-space stage tool and would need their own port. The enclosure's transform
-drives the confinement live, so moving the vessel carries the contents, but as a
-force rather than a rigid attachment: fast moves leave the cloud sloshing.
+A project is not loaded into an enclosure so much as interpreted into one. Its
+structure comes from an emitter throwing material into open space, and walling
+that in unchanged destroys it, so `conformSimulation` re-authors the project
+against the enclosure's *measured* interior — centre, per-axis half-extent, and
+fill fraction, taken from the occupancy grid rather than from a bounding box.
+
+- A cloud settles where turbulence balances its pull toward the middle, so the
+  turbulence is scaled by the ratio of vessel size to authored emitter radius.
+  That puts the equilibrium at the vessel's scale, which is what makes the
+  authored shape survive at a new size.
+- The emitter spans the vessel across and keeps the flatness it was given, so a
+  disc stays a disc instead of swelling into a filled block.
+- Flow frequency rises as the cloud shrinks, with a floor of about two turns
+  across the vessel, so there is structure to see at close framing.
+- Damping and trail length are capped. Held material re-crosses its own path
+  constantly, and stage values for either settle it into a dead uniform fog.
+
+The pull toward the middle is kept, re-centred on the vessel. Removing it and
+letting the walls do all the work looks principled and is wrong: the material
+random-walks into featureless haze and the vessel just contains a mist. The walls
+clip what reaches them, and gaps survive above and below the body.
+
+Contained particles accumulate into their own faded pair of buffers before being
+added to the scene, as the particle workspace does. Most of a saved project's
+brightness and all of its filaments live in that history, not in one frame of
+points.
+
+The conformed values are ordinary controls afterwards, under **Contained
+simulation**. Reopening a project does not re-conform: what was saved is already
+authored for its vessel. Placed fields do not travel with a simulation; they are
+a screen-space stage tool and would need their own port. The enclosure's
+transform drives the confinement live, so moving the vessel carries the contents,
+but as a force rather than a rigid attachment: fast moves leave the cloud
+sloshing.
 
 Projects store the enclosure's id, not the voxel grid, and rebuild the field from
 the mesh on open. Particle counts, positions, and elapsed time are a recipe, not a
