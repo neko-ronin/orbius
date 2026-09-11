@@ -160,6 +160,24 @@ The stage previews edits immediately. **Collect family** stores the construction
 
 Scope: volumetric orb materials. It is not an arbitrary shader graph, AI shader generation system, surface BRDF editor, or geometry editor. Noise-heavy combinations can be dense and expensive; the author should preserve negative space. Technical checks are not a substitute for the user's aesthetic acceptance.
 
+### Measuring it
+
+Frame rate is a fact about the tab, not about the renderer: a throttled or
+backgrounded tab reports single digits for a scene the GPU finishes in two
+milliseconds, and every timing taken while building the stage, the defects, the rig
+and the floor reflection was worthless for exactly that reason.
+`EXT_disjoint_timer_query_webgl2` measures the work instead of the schedule, so a
+number read from a throttled tab is still the truth. Each render pass gets its own
+query — they are already sequential, so nothing has to nest — and the per-pass
+breakdown sits under the frame counter it exists to correct. A disjoint discards
+every result in flight rather than reporting a spike that never happened.
+
+First readings, 414x321, one glass orb on the stage: footprint 0.06, stage 0.16,
+reflection 0.12, shells 0.75, composite 0.83 — 1.9ms total. Defects and inclusions
+at full strength move the shell pass by about 0.03ms, which is inside the noise, so
+the flaws are effectively free. The most expensive pass in the frame is the bloom
+composite, not any of the glass work.
+
 ## Verification and remaining quality work
 
 - 26 Node tests and production build pass. Tests cover legacy/new project contracts, primitive topology, clipped sheets, reproducibility, motion bounds, rejected geometry budgets, independent object optics, and family/operator validation.

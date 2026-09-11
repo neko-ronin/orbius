@@ -543,6 +543,30 @@ kbd {
   margin: 0 5px;
   color: #383540;
 }
+/* The per-pass GPU breakdown. Sits under the frame counter it exists to correct. */
+.stage-profile {
+  position: absolute;
+  pointer-events: none;
+  right: 25px;
+  bottom: 38px;
+  display: grid;
+  gap: 2px;
+  justify-items: end;
+  font:
+    7px ui-monospace,
+    monospace;
+  letter-spacing: 0.4px;
+  color: #6f6c7d;
+  text-transform: uppercase;
+}
+.stage-profile span {
+  display: flex;
+  gap: 8px;
+}
+.stage-profile i {
+  font-style: normal;
+  color: #46424f;
+}
 .stage-crosshair {
   width: 9px;
   height: 9px;

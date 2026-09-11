@@ -3,6 +3,7 @@ import { SpeciesField } from "./particles/SpeciesField.js";
 import { Chemistry } from "./materials/Chemistry.js";
 import { materialFragment } from "./materials/fragment.js";
 import { materialDefaults } from "./materials/catalog.js";
+import { GpuTimer } from "./gpuTimer.js";
 import {
   quadVertex,
   simVertex,
@@ -33,6 +34,7 @@ export class Engine {
         "WebGL 2 is unavailable. Try a current Chrome, Edge, Firefox, or Safari with hardware acceleration enabled.",
       );
     this.hdr = !!this.gl.getExtension("EXT_color_buffer_float");
+    this.timer = new GpuTimer(this.gl);
     this.time = 0;
     this.tick = 0;
     this.read = 0;
@@ -189,6 +191,8 @@ export class Engine {
   }
   clear() {
     this.rendered = false;
+    this.gpu = null;
+    this.timer.reset();
     this.objectsRenderer?.clearTrail();
     const gl = this.gl;
     for (const t of this.targets) {
@@ -419,56 +423,57 @@ export class Engine {
     gl.viewport(0, 0, w, h);
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.BLEND);
-    const simulate = () => {
-      for (let step = 0; step < simSteps; step++) {
-        if (c.speciesEnabled) {
-          this.speciesField.render();
-          gl.viewport(0, 0, w, h);
-          gl.activeTexture(gl.TEXTURE2);
-          gl.bindTexture(gl.TEXTURE_2D, this.speciesField.tex);
-          gl.activeTexture(gl.TEXTURE0);
+    const simulate = () =>
+      this.timer.span("simulate", () => {
+        for (let step = 0; step < simSteps; step++) {
+          if (c.speciesEnabled) {
+            this.speciesField.render();
+            gl.viewport(0, 0, w, h);
+            gl.activeTexture(gl.TEXTURE2);
+            gl.bindTexture(gl.TEXTURE_2D, this.speciesField.tex);
+            gl.activeTexture(gl.TEXTURE0);
+          }
+          gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+          this.set(this.sim, {
+            ...shared,
+            uDt: 1 / 120,
+            uLife: c.life,
+            uSpread: c.spread,
+            uSpin: c.spin,
+            uTurbulence: c.turbulence,
+            uFrequency: c.frequency,
+            uDrag: c.drag,
+            uGravity: c.gravity,
+            uDepth: c.depth,
+            uArms: c.arms,
+            uTwist: c.twist,
+            uCouplingA: [c.pairAA, c.pairAB, c.pairAC],
+            uCouplingB: [c.pairBA, c.pairBB, c.pairBC],
+            uCouplingC: [c.pairCA, c.pairCB, c.pairCC],
+            uSpeciesDrag: [c.speciesDragA, c.speciesDragB, c.speciesDragC],
+            uSpeciesLift: [c.speciesLiftA, c.speciesLiftB, c.speciesLiftC],
+          });
+          this.uniform(this.sim, "uDensity", 2, "int");
+          this.set(this.sim, camera);
+          this.containUniforms(this.sim);
+          this.fields(this.sim, this.fieldList || []);
+          gl.bindVertexArray(this.vaos[this.read]);
+          gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, this.feedback);
+          gl.bindBufferBase(
+            gl.TRANSFORM_FEEDBACK_BUFFER,
+            0,
+            this.buffers[1 - this.read],
+          );
+          gl.enable(gl.RASTERIZER_DISCARD);
+          gl.beginTransformFeedback(gl.POINTS);
+          gl.drawArrays(gl.POINTS, 0, this.count);
+          gl.endTransformFeedback();
+          gl.disable(gl.RASTERIZER_DISCARD);
+          gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, null);
+          gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, null);
+          this.read = 1 - this.read;
         }
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-        this.set(this.sim, {
-          ...shared,
-          uDt: 1 / 120,
-          uLife: c.life,
-          uSpread: c.spread,
-          uSpin: c.spin,
-          uTurbulence: c.turbulence,
-          uFrequency: c.frequency,
-          uDrag: c.drag,
-          uGravity: c.gravity,
-          uDepth: c.depth,
-          uArms: c.arms,
-          uTwist: c.twist,
-          uCouplingA: [c.pairAA, c.pairAB, c.pairAC],
-          uCouplingB: [c.pairBA, c.pairBB, c.pairBC],
-          uCouplingC: [c.pairCA, c.pairCB, c.pairCC],
-          uSpeciesDrag: [c.speciesDragA, c.speciesDragB, c.speciesDragC],
-          uSpeciesLift: [c.speciesLiftA, c.speciesLiftB, c.speciesLiftC],
-        });
-        this.uniform(this.sim, "uDensity", 2, "int");
-        this.set(this.sim, camera);
-        this.containUniforms(this.sim);
-        this.fields(this.sim, this.fieldList || []);
-        gl.bindVertexArray(this.vaos[this.read]);
-        gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, this.feedback);
-        gl.bindBufferBase(
-          gl.TRANSFORM_FEEDBACK_BUFFER,
-          0,
-          this.buffers[1 - this.read],
-        );
-        gl.enable(gl.RASTERIZER_DISCARD);
-        gl.beginTransformFeedback(gl.POINTS);
-        gl.drawArrays(gl.POINTS, 0, this.count);
-        gl.endTransformFeedback();
-        gl.disable(gl.RASTERIZER_DISCARD);
-        gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, null);
-        gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, null);
-        this.read = 1 - this.read;
-      }
-    };
+      });
     if (this.mode === "particles") {
       simulate();
       if (!this.paused || !this.rendered || this.previousConfig !== c) {
@@ -591,7 +596,7 @@ export class Engine {
       uTime: this.time,
     });
     this.uniform(this.composite, "uTexture", 0, "int");
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    this.timer.span("composite", () => gl.drawArrays(gl.TRIANGLES, 0, 3));
     gl.bindVertexArray(null);
   }
   frame(now) {
@@ -606,6 +611,9 @@ export class Engine {
       return;
     }
     this.frames++;
+    // Poll every frame: results land a few frames after the passes that produced
+    // them, and the stats callback only fires four times a second.
+    this.gpu = this.timer.poll() ?? this.gpu;
     if (now - this.statTime > 800) {
       this.onStats({
         fps: Math.round((this.frames * 1000) / (now - this.statTime)),
@@ -613,6 +621,7 @@ export class Engine {
         height: this.canvas.height,
         time: this.time,
         count: this.count || 0,
+        gpu: this.gpu,
       });
       this.statTime = now;
       this.frames = 0;
@@ -644,6 +653,7 @@ export class Engine {
     this.chemistry?.dispose();
     this.speciesField?.dispose();
     this.objectsRenderer?.dispose();
+    this.timer.dispose();
     if (this.volumeTexture) this.gl.deleteTexture(this.volumeTexture);
     this.programs.forEach((p) => gl.deleteProgram(p));
     this.buffers.forEach((b) => gl.deleteBuffer(b));

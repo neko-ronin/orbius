@@ -442,29 +442,32 @@ export class ObjectRenderer {
       e.uniform(program, "uLightDir[0]", rig.direction, "v4");
       e.uniform(program, "uLightColor[0]", rig.color, "v4");
     };
+    const clock = e.timer;
     this.sync(objects);
     this.resize(w, h);
     g.viewport(0, 0, w, h);
     g.disable(g.DEPTH_TEST);
     g.disable(g.CULL_FACE);
     // Coverage from straight above, for the floor's contact shadow.
-    const casters = objects.filter((o) => o.visible);
-    g.bindFramebuffer(g.FRAMEBUFFER, this.shadow.fb);
-    g.viewport(0, 0, FOOTPRINT, FOOTPRINT);
-    g.clearColor(0, 0, 0, 1);
-    g.clear(g.COLOR_BUFFER_BIT);
-    for (const o of casters) {
-      const r = this.resources.get(o.id);
-      e.set(this.footprint, {
-        uPosition: o.position,
-        uRotationObject: o.rotation,
-        uScale: o.scale,
-        uStageExtent: STAGE_EXTENT,
-      });
-      g.bindVertexArray(r.vaos[0]);
-      g.drawArrays(g.TRIANGLES, 0, r.meshCount);
-    }
-    g.viewport(0, 0, w, h);
+    clock.span("footprint", () => {
+      const casters = objects.filter((o) => o.visible);
+      g.bindFramebuffer(g.FRAMEBUFFER, this.shadow.fb);
+      g.viewport(0, 0, FOOTPRINT, FOOTPRINT);
+      g.clearColor(0, 0, 0, 1);
+      g.clear(g.COLOR_BUFFER_BIT);
+      for (const o of casters) {
+        const r = this.resources.get(o.id);
+        e.set(this.footprint, {
+          uPosition: o.position,
+          uRotationObject: o.rotation,
+          uScale: o.scale,
+          uStageExtent: STAGE_EXTENT,
+        });
+        g.bindVertexArray(r.vaos[0]);
+        g.drawArrays(g.TRIANGLES, 0, r.meshCount);
+      }
+      g.viewport(0, 0, w, h);
+    });
     g.activeTexture(g.TEXTURE6);
     g.bindTexture(g.TEXTURE_2D, this.shadow.texture);
     g.activeTexture(g.TEXTURE0);
@@ -482,12 +485,11 @@ export class ObjectRenderer {
         uStageFloor: config.stageFloor,
         uStageRoughness: config.stageRoughness,
         uStageExtent: STAGE_EXTENT,
-        uStageExtent: STAGE_EXTENT,
       });
       e.uniform(this.backdrop, "uFootprint", 6, "int");
       bindRig(this.backdrop);
       g.bindVertexArray(e.emptyVAO);
-      g.drawArrays(g.TRIANGLES, 0, 3);
+      clock.span("stage", () => g.drawArrays(g.TRIANGLES, 0, 3));
     }
     g.enable(g.BLEND);
     g.blendFunc(g.ONE, g.ONE);
@@ -545,41 +547,45 @@ export class ObjectRenderer {
     // What the shells leave in the floor, before anything that stands on it. The
     // mirror reverses the winding, so cull the near faces to keep the far ones,
     // which are the ones now facing the camera.
-    if (config.stageRoughness < 0.85) {
-      g.enable(g.CULL_FACE);
-      g.cullFace(g.FRONT);
-      for (const o of objects)
-        if (o.visible && o.role === "glass")
-          draw(o, this.reflection, false, true);
-      g.cullFace(g.BACK);
-      g.disable(g.CULL_FACE);
-    }
-    objects
-      .filter((o) => o.visible && o.role !== "glass")
-      .forEach((o) => draw(o, this.dots, true));
-    if (drawContents) {
-      // Fade the history, lay this frame's points over it, then add the result to
-      // the scene so the shells refract it alongside the dots.
-      const write = 1 - this.trailRead;
-      g.disable(g.BLEND);
-      g.bindFramebuffer(g.FRAMEBUFFER, this.trail[write].fb);
-      g.bindVertexArray(e.emptyVAO);
-      g.activeTexture(g.TEXTURE0);
-      g.bindTexture(g.TEXTURE_2D, this.trail[this.trailRead].texture);
-      e.set(e.fade, { uFade: config.trail });
-      e.uniform(e.fade, "uTexture", 0, "int");
-      g.drawArrays(g.TRIANGLES, 0, 3);
-      g.enable(g.BLEND);
-      g.blendFunc(g.ONE, g.ONE);
-      drawContents();
-      this.trailRead = write;
-      g.bindFramebuffer(g.FRAMEBUFFER, accumulator);
-      g.bindVertexArray(e.emptyVAO);
-      g.bindTexture(g.TEXTURE_2D, this.trail[this.trailRead].texture);
-      e.set(e.fade, { uFade: 1 });
-      e.uniform(e.fade, "uTexture", 0, "int");
-      g.drawArrays(g.TRIANGLES, 0, 3);
-    }
+    if (config.stageRoughness < 0.85)
+      clock.span("reflection", () => {
+        g.enable(g.CULL_FACE);
+        g.cullFace(g.FRONT);
+        for (const o of objects)
+          if (o.visible && o.role === "glass")
+            draw(o, this.reflection, false, true);
+        g.cullFace(g.BACK);
+        g.disable(g.CULL_FACE);
+      });
+    clock.span("dots", () =>
+      objects
+        .filter((o) => o.visible && o.role !== "glass")
+        .forEach((o) => draw(o, this.dots, true)),
+    );
+    if (drawContents)
+      clock.span("contents", () => {
+        // Fade the history, lay this frame's points over it, then add the result to
+        // the scene so the shells refract it alongside the dots.
+        const write = 1 - this.trailRead;
+        g.disable(g.BLEND);
+        g.bindFramebuffer(g.FRAMEBUFFER, this.trail[write].fb);
+        g.bindVertexArray(e.emptyVAO);
+        g.activeTexture(g.TEXTURE0);
+        g.bindTexture(g.TEXTURE_2D, this.trail[this.trailRead].texture);
+        e.set(e.fade, { uFade: config.trail });
+        e.uniform(e.fade, "uTexture", 0, "int");
+        g.drawArrays(g.TRIANGLES, 0, 3);
+        g.enable(g.BLEND);
+        g.blendFunc(g.ONE, g.ONE);
+        drawContents();
+        this.trailRead = write;
+        g.bindFramebuffer(g.FRAMEBUFFER, accumulator);
+        g.bindVertexArray(e.emptyVAO);
+        g.bindTexture(g.TEXTURE_2D, this.trail[this.trailRead].texture);
+        e.set(e.fade, { uFade: 1 });
+        e.uniform(e.fade, "uTexture", 0, "int");
+        g.drawArrays(g.TRIANGLES, 0, 3);
+      });
     g.disable(g.BLEND);
     // Camera-space depth of each origin: the vertex shader tilts, then rotates.
     const cameraZ = (p) =>
@@ -591,30 +597,43 @@ export class ObjectRenderer {
       .sort((a, b) => cameraZ(a.position) - cameraZ(b.position));
     g.enable(g.CULL_FACE);
     g.depthFunc(g.LESS);
-    for (const o of shells) {
-      // Measure this shell's back faces for optical thickness.
-      g.bindFramebuffer(g.FRAMEBUFFER, this.back.fb);
-      g.enable(g.DEPTH_TEST);
-      g.clearColor(1, 0, 0, 1);
-      g.clearDepth(1);
-      g.clear(g.COLOR_BUFFER_BIT | g.DEPTH_BUFFER_BIT);
-      g.cullFace(g.FRONT);
-      draw(o, this.backDepth, false);
-      // Resolve everything behind the shell so it has something to refract, then
-      // shade it back into the accumulator. The depth buffer there keeps nearer
-      // shells in front, per pixel, and survives the resolve.
-      g.bindFramebuffer(g.READ_FRAMEBUFFER, accumulator);
-      g.bindFramebuffer(g.DRAW_FRAMEBUFFER, this.scene.fb);
-      g.blitFramebuffer(0, 0, w, h, 0, 0, w, h, g.COLOR_BUFFER_BIT, g.NEAREST);
-      g.bindFramebuffer(g.FRAMEBUFFER, accumulator);
-      g.activeTexture(g.TEXTURE3);
-      g.bindTexture(g.TEXTURE_2D, this.scene.texture);
-      g.activeTexture(g.TEXTURE4);
-      g.bindTexture(g.TEXTURE_2D, this.back.texture);
-      g.activeTexture(g.TEXTURE0);
-      g.cullFace(g.BACK);
-      draw(o, this.glass, false);
-    }
+    clock.span("shells", () => {
+      for (const o of shells) {
+        // Measure this shell's back faces for optical thickness.
+        g.bindFramebuffer(g.FRAMEBUFFER, this.back.fb);
+        g.enable(g.DEPTH_TEST);
+        g.clearColor(1, 0, 0, 1);
+        g.clearDepth(1);
+        g.clear(g.COLOR_BUFFER_BIT | g.DEPTH_BUFFER_BIT);
+        g.cullFace(g.FRONT);
+        draw(o, this.backDepth, false);
+        // Resolve everything behind the shell so it has something to refract, then
+        // shade it back into the accumulator. The depth buffer there keeps nearer
+        // shells in front, per pixel, and survives the resolve.
+        g.bindFramebuffer(g.READ_FRAMEBUFFER, accumulator);
+        g.bindFramebuffer(g.DRAW_FRAMEBUFFER, this.scene.fb);
+        g.blitFramebuffer(
+          0,
+          0,
+          w,
+          h,
+          0,
+          0,
+          w,
+          h,
+          g.COLOR_BUFFER_BIT,
+          g.NEAREST,
+        );
+        g.bindFramebuffer(g.FRAMEBUFFER, accumulator);
+        g.activeTexture(g.TEXTURE3);
+        g.bindTexture(g.TEXTURE_2D, this.scene.texture);
+        g.activeTexture(g.TEXTURE4);
+        g.bindTexture(g.TEXTURE_2D, this.back.texture);
+        g.activeTexture(g.TEXTURE0);
+        g.cullFace(g.BACK);
+        draw(o, this.glass, false);
+      }
+    });
     g.bindFramebuffer(g.READ_FRAMEBUFFER, accumulator);
     g.bindFramebuffer(g.DRAW_FRAMEBUFFER, target);
     g.blitFramebuffer(0, 0, w, h, 0, 0, w, h, g.COLOR_BUFFER_BIT, g.NEAREST);

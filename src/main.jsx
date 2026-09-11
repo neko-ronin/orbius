@@ -194,6 +194,7 @@ function App() {
     [fields, setFields] = useState([]),
     [stats, setStats] = useState({
       fps: 0,
+      gpu: null,
       width: 0,
       height: 0,
       time: 0,
@@ -964,7 +965,27 @@ function App() {
                 <div className="stage-bottom-right">
                   <span className="live-dot" />
                   {stats.fps} FPS <span>·</span> {stats.width} × {stats.height}
+                  {stats.gpu && (
+                    <>
+                      {" "}
+                      <span>·</span> {stats.gpu.total.toFixed(2)} MS GPU
+                    </>
+                  )}
                 </div>
+                {/* Frame rate is a fact about the tab; this is a fact about the
+                    renderer, and the two disagree the moment the tab is not in
+                    front. The breakdown is where a pass that got expensive
+                    actually shows itself. */}
+                {stats.gpu && !show && (
+                  <div className="stage-profile">
+                    {stats.gpu.passes.map((p) => (
+                      <span key={p.label}>
+                        <i>{p.label}</i>
+                        {p.ms.toFixed(2)}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 {(resolved.mode === "particles" ? fields : []).map((f) => (
                   <button
                     className={`field-marker field-${f.type}`}
