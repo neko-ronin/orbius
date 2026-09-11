@@ -1227,7 +1227,15 @@ function App() {
                     ["Camera", ["zoom", "tilt", "rotation", "autoRotate"]],
                     [
                       "Studio & finish",
-                      ["backdrop", "bloom", "exposure", "grain", "vignette"],
+                      [
+                        "backdrop",
+                        "stageFloor",
+                        "stageRoughness",
+                        "bloom",
+                        "exposure",
+                        "grain",
+                        "vignette",
+                      ],
                     ],
                     ...(particleContainer
                       ? [

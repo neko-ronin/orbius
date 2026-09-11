@@ -1,17 +1,32 @@
 import { objectOptics } from "./model.js";
 import { smoothNormals } from "./geometry.js";
 import { quadVertex } from "../shaders.js";
+const FOOTPRINT = 256;
+const STAGE_EXTENT = 5;
+const transforms = `
+mat3 rx(float a){float c=cos(a),s=sin(a);return mat3(1,0,0,0,c,s,0,-s,c);}
+mat3 ry(float a){float c=cos(a),s=sin(a);return mat3(c,0,-s,0,1,0,s,0,c);}
+mat3 rz(float a){float c=cos(a),s=sin(a);return mat3(c,s,0,-s,c,0,0,0,1);}
+mat3 modelMatrix(vec3 d){return rz(radians(d.z))*ry(radians(d.y))*rx(radians(d.x));}`;
+// Straight down over the stage: a coverage mask of what stands above each patch
+// of floor, which is all a contact shadow needs and works for any mesh.
+const footprintFragment = `#version 300 es
+precision highp float;out vec4 frag;void main(){frag=vec4(1.);}`;
+const footprintVertex = `#version 300 es
+precision highp float;layout(location=0)in vec3 position;
+uniform vec3 uPosition,uRotationObject,uScale;uniform float uStageExtent;
+${transforms}
+void main(){vec3 w=modelMatrix(uRotationObject)*(position*uScale)+uPosition;
+ gl_Position=vec4(w.x/uStageExtent,w.z/uStageExtent,0.,1.);}`;
 const vertex = `#version 300 es
 precision highp float;layout(location=0)in vec3 position;layout(location=1)in vec3 normal;
 uniform float uBillow,uFlow,uTime,uIsLayers;
 uniform vec3 uPosition,uRotationObject,uScale;uniform float uTilt,uRotation,uZoom,uAspect,uPointSize,uPixelRatio;
 out vec3 vNormal,vView,vLocal;out float vDepth;
-mat3 rx(float a){float c=cos(a),s=sin(a);return mat3(1,0,0,0,c,s,0,-s,c);}
-mat3 ry(float a){float c=cos(a),s=sin(a);return mat3(c,0,-s,0,1,0,s,0,c);}
-mat3 rz(float a){float c=cos(a),s=sin(a);return mat3(c,s,0,-s,c,0,0,0,1);}
+${transforms}
 void main(){vec3 local=position;
 if(uIsLayers>.5) local.y=clamp(local.y+sin(local.x*4.+local.z*3.+uTime*uFlow*2.)*uBillow,normal.x,normal.y);
-mat3 model=rz(radians(uRotationObject.z))*ry(radians(uRotationObject.y))*rx(radians(uRotationObject.x));mat3 camera=rx(uTilt)*ry(uRotation);vec3 p=camera*(model*(local*uScale)+uPosition);float d=4.-p.z;
+mat3 model=modelMatrix(uRotationObject);mat3 camera=rx(uTilt)*ry(uRotation);vec3 p=camera*(model*(local*uScale)+uPosition);float d=4.-p.z;
 vLocal=local;vView=vec3(p.xy,-d);vNormal=camera*model*(normal/uScale);vDepth=d;gl_Position=vec4(p.x*2.5*uZoom/uAspect,p.y*2.5*uZoom,(20.1/19.9)*d-(4./19.9),d);gl_PointSize=clamp(uPointSize*uPixelRatio*3.5/max(d,.1),1.,32.);}`;
 const dots = `#version 300 es
 precision highp float;in float vDepth;in vec3 vLocal;out vec4 frag;uniform vec3 uTint,uColorTop;uniform float uEmission,uOpacity,uGradient,uFlow,uSparkles,uTime;
@@ -23,9 +38,18 @@ float a=exp(-r*r*4.)*.6*uEmission*uOpacity*exp(-max(vDepth-3.,0.)*.12);
 vec3 color=mix(uTint,uColorTop,smoothstep(-.35,.5,vLocal.y)*uGradient);
 float peak=pow(.5+.5*sin(vLocal.x*7.+vLocal.z*5.),8.);
 frag=vec4((color*wave*(1.+peak*1.8)+vec3(spark))*a,a);}`;
-const env = `
+// The studio rig, and the world it stands in. Both are evaluated from world-space
+// directions so the lights stay put when the camera orbits: highlights that sweep
+// across a shell as you move are most of what separates glass from a painted ball.
+const world = `
+uniform sampler2D uFootprint;uniform float uStageExtent;
+mat3 viewMatrix(float tilt,float rotation){
+ float c=cos(rotation),s=sin(rotation),ct=cos(tilt),st=sin(tilt);
+ return mat3(1,0,0,0,ct,st,0,-st,ct)*mat3(c,0,-s,0,1,0,s,0,c);}
 vec3 envLight(vec3 d,float rough){
- float sharp=1.-rough;float az=atan(d.x,d.z);
+ // atan(0,0) is undefined and a straight-up or straight-down direction is a
+ // perfectly ordinary lookup here, so keep the azimuth defined everywhere.
+ float sharp=1.-rough;float az=atan(d.x,abs(d.z)<1e-5&&abs(d.x)<1e-5?1.:d.z);
  vec3 sky=mix(vec3(.010,.014,.024),vec3(.048,.060,.082),smoothstep(-.9,.9,d.y));
  float key=pow(max(0.,dot(d,normalize(vec3(-.45,.5,.74)))),mix(2.5,26.,sharp));
  float band=smoothstep(-.95,-.35,d.y)*smoothstep(1.05,.35,d.y);
@@ -33,19 +57,49 @@ vec3 envLight(vec3 d,float rough){
  float edge=exp(-pow((az+2.05)*mix(3.,15.,sharp),2.))*band;
  float bounce=smoothstep(.15,-.85,d.y);
  return sky+vec3(1.,.97,.93)*key*1.9+vec3(.72,.86,1.)*strip*2.6+vec3(1.,.74,.48)*edge*2.1+vec3(.55,.34,.26)*bounce*.5;
+}
+// The stage floor, as an analytic plane rather than geometry: it is infinite, it
+// needs no depth, and refraction through a shell bends a real horizon instead of
+// a flat gradient.
+vec3 stage(vec3 eye,vec3 dir,float floorY,float rough,float lit){
+ float t=(floorY-eye.y)/dir.y;
+ if(dir.y>-1e-4||t<=0.) return envLight(dir,.92)*lit;
+ vec3 hit=eye+dir*t;
+ // Offset along the key light so the shadow falls away from it, and sample wide
+ // enough that the edge is a penumbra rather than a cutout.
+ vec2 foot=(hit.xz+vec2(.32,-.20)*.55)/uStageExtent*.5+.5;
+ float shade=0.;
+ for(int i=0;i<8;i++){float a=float(i)*2.399963;
+  vec2 o=vec2(cos(a),sin(a))*sqrt((float(i)+.5)/8.)*.055;
+  shade+=texture(uFootprint,foot+o).r;}
+ shade=clamp(shade/8.,0.,1.);
+ // Sheen: the rig reflected in the floor is what draws the light pools, and they
+ // travel when a light moves because they are the same function.
+ vec3 sheen=envLight(reflect(dir,vec3(0,1,0)),rough);
+ vec3 ambient=envLight(vec3(0,1,0),1.)+envLight(normalize(vec3(dir.x,.6,dir.z)),.85);
+ vec3 surface=(vec3(.30,.31,.335)*ambient*(1.-shade*.82)+sheen*mix(1.1,.12,rough)*(1.-shade*.55))*lit;
+ // The seam where the floor meets the far wall: a real horizon for a shell to
+ // bend, which a screen-space gradient can never give it.
+ float far=smoothstep(3.5,9.,length(hit.xz-eye.xz));
+ return mix(surface,envLight(dir,.92)*lit,far);
 }`;
 const backdropFragment = `#version 300 es
-precision highp float;in vec2 uv;out vec4 frag;uniform float uAspect,uBackdrop;
-void main(){vec2 p=(uv*2.-1.)*vec2(uAspect,1.);vec2 q=(p-vec2(0.,-.25))*vec2(.6,1.);
- vec3 c=mix(vec3(.052,.058,.072),vec3(.006,.008,.013),smoothstep(-1.,.9,p.y));
- frag=vec4((c+vec3(.10,.11,.135)*exp(-dot(q,q)*1.5))*uBackdrop,1.);}`;
+precision highp float;in vec2 uv;out vec4 frag;
+uniform float uAspect,uZoom,uBackdrop,uTilt,uRotation,uStageFloor,uStageRoughness;
+${world}
+void main(){vec2 ndc=uv*2.-1.;
+ mat3 cam=viewMatrix(uTilt,uRotation),inv=transpose(cam);
+ vec3 eye=inv*vec3(0,0,4.);
+ vec3 dir=inv*normalize(vec3(ndc.x*uAspect/(2.5*uZoom),ndc.y/(2.5*uZoom),-1.));
+ frag=vec4(stage(eye,dir,uStageFloor,uStageRoughness,uBackdrop),1.);}`;
 const backDepth = `#version 300 es
 precision highp float;in float vDepth;out vec4 frag;void main(){frag=vec4(vDepth/16.,0,0,1);}`;
 const glass = `#version 300 es
 precision highp float;in vec3 vNormal,vView;in float vDepth;out vec4 frag;
 uniform sampler2D uContents,uBackDepth;uniform vec2 uResolution;uniform vec3 uTint;
 uniform float uOpacity,uIor,uRoughness,uThickness,uDispersion,uStudioLight,uAbsorption,uZoom,uAspect,uSamples;
-${env}
+uniform float uTilt,uRotation,uStageFloor,uStageRoughness;
+${world}
 void main(){vec3 n=normalize(vNormal),view=normalize(-vView);float nv=max(.001,dot(n,view));
  float f0=pow((uIor-1.)/(uIor+1.),2.);float f=f0+(1.-f0)*pow(1.-nv,5.);
  vec2 uv=gl_FragCoord.xy/uResolution;
@@ -70,7 +124,12 @@ void main(){vec3 n=normalize(vNormal),view=normalize(-vView);float nv=max(.001,d
  contents+=tap;}
  contents/=uSamples;
  vec3 absorption=exp(-max(vec3(.001),vec3(1.)-uTint)*(uAbsorption+uOpacity)*thickness*4.);
- vec3 reflection=envLight(reflect(-view,n),uRoughness)*uStudioLight;
+ // Reflect the room, not just the rig: the floor wrapping into the underside of a
+ // shell is most of what puts an object on a surface rather than in a void. The
+ // backdrop control dims what the camera sees directly, never what the glass sees.
+ mat3 inv=transpose(viewMatrix(uTilt,uRotation));
+ vec3 posW=inv*(vView+vec3(0,0,4.));
+ vec3 reflection=stage(posW,inv*reflect(-view,n),uStageFloor,uStageRoughness,1.)*uStudioLight;
  // Grazing sheen: the thin bright edge a real shell shows against a dark studio.
  reflection+=mix(vec3(.6,.72,1.),uTint,.35)*pow(1.-nv,6.)*uStudioLight*.4;
  frag=vec4(contents*absorption*(1.-f)+reflection*f,1.);
@@ -82,6 +141,7 @@ export class ObjectRenderer {
     this.dots = engine.program(vertex, dots);
     this.backDepth = engine.program(vertex, backDepth);
     this.backdrop = engine.program(quadVertex, backdropFragment);
+    this.footprint = engine.program(footprintVertex, footprintFragment);
     this.resources = new Map();
   }
   sync(objects) {
@@ -263,6 +323,10 @@ export class ObjectRenderer {
     ];
     this.trailRead = 0;
     this.clearTrail();
+    const previous = [this.width, this.height];
+    [this.width, this.height] = [FOOTPRINT, FOOTPRINT];
+    this.shadow = this.colorTarget(g.LINEAR, null);
+    [this.width, this.height] = previous;
   }
   clearTrail() {
     if (!this.trail) return;
@@ -281,6 +345,27 @@ export class ObjectRenderer {
     g.viewport(0, 0, w, h);
     g.disable(g.DEPTH_TEST);
     g.disable(g.CULL_FACE);
+    // Coverage from straight above, for the floor's contact shadow.
+    const casters = objects.filter((o) => o.visible);
+    g.bindFramebuffer(g.FRAMEBUFFER, this.shadow.fb);
+    g.viewport(0, 0, FOOTPRINT, FOOTPRINT);
+    g.clearColor(0, 0, 0, 1);
+    g.clear(g.COLOR_BUFFER_BIT);
+    for (const o of casters) {
+      const r = this.resources.get(o.id);
+      e.set(this.footprint, {
+        uPosition: o.position,
+        uRotationObject: o.rotation,
+        uScale: o.scale,
+        uStageExtent: STAGE_EXTENT,
+      });
+      g.bindVertexArray(r.vaos[0]);
+      g.drawArrays(g.TRIANGLES, 0, r.meshCount);
+    }
+    g.viewport(0, 0, w, h);
+    g.activeTexture(g.TEXTURE6);
+    g.bindTexture(g.TEXTURE_2D, this.shadow.texture);
+    g.activeTexture(g.TEXTURE0);
     const accumulator = this.accumulator.fb;
     g.bindFramebuffer(g.FRAMEBUFFER, accumulator);
     g.clearColor(0.002, 0.004, 0.007, 1);
@@ -290,10 +375,14 @@ export class ObjectRenderer {
     // Studio sweep behind the objects, so refraction and reflection have a world to show.
     if (config.backdrop > 0) {
       e.set(this.backdrop, {
-        uZoom: shared.uZoom,
-        uAspect: shared.uAspect,
+        ...shared,
         uBackdrop: config.backdrop,
+        uStageFloor: config.stageFloor,
+        uStageRoughness: config.stageRoughness,
+        uStageExtent: STAGE_EXTENT,
+        uStageExtent: STAGE_EXTENT,
       });
+      e.uniform(this.backdrop, "uFootprint", 6, "int");
       g.bindVertexArray(e.emptyVAO);
       g.drawArrays(g.TRIANGLES, 0, 3);
     }
@@ -321,6 +410,8 @@ export class ObjectRenderer {
         uThickness: o.thickness,
         uDispersion: o.dispersion,
         uStudioLight: o.studioLight,
+        uStageFloor: config.stageFloor,
+        uStageRoughness: config.stageRoughness,
         uAbsorption: o.absorption,
         uSamples: e.show ? 12 : 4,
         uEmission: o.emission,
@@ -334,6 +425,7 @@ export class ObjectRenderer {
       if (!points) {
         e.uniform(program, "uContents", 3, "int");
         e.uniform(program, "uBackDepth", 4, "int");
+        e.uniform(program, "uFootprint", 6, "int");
       }
       g.bindVertexArray(r.vaos[points ? 1 : 0]);
       g.drawArrays(
@@ -418,7 +510,7 @@ export class ObjectRenderer {
   }
   disposeTarget() {
     const g = this.engine.gl;
-    for (const t of [this.scene, this.back, ...(this.trail || [])])
+    for (const t of [this.scene, this.back, this.shadow, ...(this.trail || [])])
       if (t) {
         g.deleteTexture(t.texture);
         g.deleteFramebuffer(t.fb);
@@ -430,7 +522,7 @@ export class ObjectRenderer {
     }
     if (this.backDepthBuffer) g.deleteRenderbuffer(this.backDepthBuffer);
     this.scene = this.back = this.accumulator = this.backDepthBuffer = null;
-    this.trail = null;
+    this.trail = this.shadow = null;
   }
   dispose() {
     for (const r of this.resources.values()) this.deleteResource(r);

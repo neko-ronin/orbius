@@ -38,7 +38,36 @@ The mesh is rasterized into vertical inside/outside intervals. Sheet samples and
 
 The renderer measures back-face depth into a separate color/depth target. Front-face shading uses that depth for optical thickness, Snell-direction screen-space offsets, tint absorption, and RGB dispersion. Transmission blur uses four samples in development and twelve in show mode. IOR, thickness, absorption, roughness, dispersion, and studio brightness are independent controls.
 
-Lighting is one camera-locked studio rig (`envLight`): a graded sky, a large soft key box, a wide cool strip and a narrow warm strip that read as vertical highlights on a curved shell, and a floor bounce. Roughness widens every one of them. A grazing sheen term adds the thin bright edge a shell shows against a dark studio. **Studio backdrop** (scene finish) draws a dark sweep behind the objects so refraction and reflection have a world to show; set it to zero for black-space, dendrite-style compositions. Four **optical finish** presets — Clear, Frosted, Prism, Smoked — set the seven optical controls together, since no single slider produces a finish on its own.
+### Stage
+
+The glass sat in a void, and that is most of why it read as unreal: refraction can
+only announce itself by deforming recognisable structure, and a smooth screen-space
+gradient stays a smooth gradient however hard you bend it. The backdrop is now a
+world-space stage — an analytic floor plane with a horizon, evaluated per pixel from
+a reconstructed world ray rather than drawn as geometry, so it is infinite, needs no
+depth, and costs one fullscreen pass. **Floor height** and **Floor finish** place and
+polish it. Shells reflect and refract the room, not just the rig; the floor wrapping
+into the underside of a shell is most of what puts an object on a surface.
+
+The rig is world-locked now rather than camera-locked, so highlights sweep across a
+shell as the camera orbits instead of riding along with it. **Studio backdrop** dims
+only what the camera sees directly — reflections always see the full room, so a
+black-space composition still has lit glass.
+
+A contact shadow comes from a 256² coverage mask rendered straight down over the
+stage, sampled with a widening disc so the edge is a penumbra rather than a cutout.
+It works for any mesh, including imports, because it is just coverage. Its offset is
+currently a constant matched to the key light's azimuth; when the rig becomes
+data-driven that constant should derive from the key light instead.
+
+Not yet done from the realism list: glass defects (surface waviness, inclusions,
+micro-scratches, uneven wall thickness), a data-driven light rig with per-light
+placement, size, Kelvin and intensity, the object's own reflection in the floor, and
+temporal drift in the lighting. The environment is procedural by necessity — the
+project ships no external assets — so a convincing studio is reachable and a
+photographic one is not.
+
+Lighting is one studio rig (`envLight`): a graded sky, a large soft key box, a wide cool strip and a narrow warm strip that read as vertical highlights on a curved shell, and a floor bounce. Roughness widens every one of them. A grazing sheen term adds the thin bright edge a shell shows against a dark studio. **Studio backdrop** (scene finish) draws a dark sweep behind the objects so refraction and reflection have a world to show; set it to zero for black-space, dendrite-style compositions. Four **optical finish** presets — Clear, Frosted, Prism, Smoked — set the seven optical controls together, since no single slider produces a finish on its own.
 
 Objects draw into a multisampled accumulator (4x, dropping to 2x above two megapixels, and to none if the GPU refuses the allocation), which is what gives the shell silhouettes clean edges; the fragment shader still runs once per pixel, so only the resolve is added cost.
 

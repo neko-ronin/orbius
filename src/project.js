@@ -54,6 +54,8 @@ export const defaults = {
   showScale: 1.5,
   backdrop: 0.55,
   containment: 1.2,
+  stageFloor: -1.15,
+  stageRoughness: 0.42,
 };
 // The parameters a saved particle project carries into a glass enclosure. Trail,
 // camera, and scene finish stay with the enclosure's own composition.
@@ -86,6 +88,22 @@ export const controls = {
     0.05,
     "How hard the enclosure holds the loaded particle simulation inside its walls. Low values let energetic material bulge through thin sections; high values pin it to the surface.",
     "particle boundary collision response",
+  ],
+  stageFloor: [
+    "Floor height",
+    -3,
+    0,
+    0.01,
+    "Where the studio floor sits relative to the objects. Just below an object grounds it; drop it away for a floating presentation. The glass reflects and refracts the floor either way.",
+    "studio cyclorama floor photography",
+  ],
+  stageRoughness: [
+    "Floor finish",
+    0,
+    1,
+    0.01,
+    "Polish of the floor. Low values give a wet, mirror-like sweep that throws the lights back up into the glass; high values give matte seamless paper.",
+    "glossy studio floor reflection roughness",
   ],
   backdrop: [
     "Studio backdrop",
