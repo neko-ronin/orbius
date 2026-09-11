@@ -5,6 +5,7 @@ import {
   meshInfo,
   surfacePoints,
   volumePoints,
+  volumeField,
 } from "./geometry.js";
 self.onmessage = ({ data }) => {
   try {
@@ -13,6 +14,11 @@ self.onmessage = ({ data }) => {
       : data.triangles
         ? Float32Array.from(data.triangles)
         : parseMesh(data.buffer, data.name);
+    if (data.role === "field") {
+      const { field, resolution } = volumeField(triangles);
+      self.postMessage({ field, resolution }, [field.buffer]);
+      return;
+    }
     const info = meshInfo(triangles);
     const layer =
       data.role === "layers"

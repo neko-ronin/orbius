@@ -7,6 +7,7 @@ import {
   validateObjects,
   objectOptics,
 } from "./model.js";
+import { validateProject, simulationKeys, fitSimulation } from "../project.js";
 // Coordinated optical settings; each is a whole finish, not one slider.
 const glassFinishes = [
   [
@@ -64,8 +65,11 @@ export default function ObjectEditor({
   selected,
   onSelect,
   notify,
+  particleContainer,
+  onSimulation,
 }) {
   const input = useRef(),
+    simulationInput = useRef(),
     worker = useRef();
   const [busy, setBusy] = useState(false),
     [message, setMessage] = useState("");
@@ -200,6 +204,39 @@ export default function ObjectEditor({
         }
       },
     );
+  }
+  // A saved particle project becomes live contents of this shell: its solver
+  // parameters come across, and the mesh becomes the volume that confines them.
+  async function importSimulation(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !current) return;
+    if (file.size > 96 * 1024 * 1024) {
+      setMessage("Project is too large. Maximum file size is 96 MB.");
+      return;
+    }
+    let saved;
+    try {
+      saved = validateProject(JSON.parse(await file.text()));
+    } catch (err) {
+      setMessage(`Could not read that project: ${err.message}`);
+      return;
+    }
+    const id = current.id;
+    process({ triangles: current.triangles, role: "field" }, (result) => {
+      onSimulation({
+        container: id,
+        field: result.field,
+        resolution: result.resolution,
+        config: Object.fromEntries(
+          simulationKeys.map((key) => [
+            key,
+            fitSimulation(saved.config, current.scale)[key],
+          ]),
+        ),
+      });
+      notify(`${saved.name} is running inside ${current.name}, fitted to it.`);
+    });
   }
   function replaceGeometry(next) {
     validateObjects(next);
@@ -426,13 +463,41 @@ export default function ObjectEditor({
             </select>
           </label>
           {current.role === "glass" && (
-            <button
-              className="primary-button"
-              disabled={busy || objects.length >= MAX_OBJECTS}
-              onClick={addLayers}
-            >
-              + Design inner layers
-            </button>
+            <>
+              <button
+                className="primary-button"
+                disabled={busy || objects.length >= MAX_OBJECTS}
+                onClick={addLayers}
+              >
+                + Design inner layers
+              </button>
+              <button
+                className="primary-button"
+                disabled={busy}
+                onClick={() => simulationInput.current.click()}
+              >
+                {particleContainer === current.id
+                  ? "Replace contained simulation"
+                  : "+ Load particle simulation"}
+              </button>
+              <input
+                ref={simulationInput}
+                type="file"
+                accept=".json,.boast.json"
+                hidden
+                onChange={importSimulation}
+              />
+              {particleContainer === current.id && (
+                <button onClick={() => onSimulation(null)}>
+                  Empty this enclosure
+                </button>
+              )}
+              <p className="mesh-formats">
+                {particleContainer === current.id
+                  ? "A saved particle simulation is running inside this shell. Its solver parameters travel with this project; placed fields do not."
+                  : "Open a saved .boast.json particle project to run its simulation inside this shell."}
+              </p>
+            </>
           )}
           {current.role === "layers" && (
             <LayerControls object={current} busy={busy} onBuild={buildLayers} />

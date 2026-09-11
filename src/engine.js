@@ -65,6 +65,7 @@ export class Engine {
     this.chemistry = new Chemistry(this);
     this.speciesField = new SpeciesField(this);
     this.objectsRenderer = new ObjectRenderer(this);
+    this.setContainer(null);
     this.last = performance.now();
     this.statTime = this.last;
     this.frames = 0;
@@ -138,19 +139,23 @@ export class Engine {
       seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
       return seed / 4294967296;
     };
+    const held = this.contained();
     for (let i = 0; i < this.count; i++) {
       const r = Math.sqrt(rand()) * c.spread,
         a =
           (Math.floor(rand() * c.arms) * Math.PI * 2) / c.arms +
           r * c.twist +
           (rand() - 0.5) * 0.25;
-      const x = Math.cos(a) * r,
-        z = Math.sin(a) * r;
+      let x = Math.cos(a) * r,
+        z = Math.sin(a) * r,
+        y =
+          (rand() - 0.5) * c.depth * (0.2 + r * 0.45) +
+          (c.speciesEnabled ? ((i % 3) - 1) * 0.6 : 0);
+      if (held) [x, y, z] = this.seedInside(rand);
       data.set(
         [
           x,
-          (rand() - 0.5) * c.depth * (0.2 + r * 0.45) +
-            (c.speciesEnabled ? ((i % 3) - 1) * 0.6 : 0),
+          y,
           z,
           rand() * c.life,
           -z * c.spin * 0.3,
@@ -257,6 +262,88 @@ export class Engine {
     });
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
+  // The enclosure a loaded particle simulation is confined to: an occupancy grid
+  // on the GPU for the solver, and the same grid on the CPU for seeding.
+  setContainer(field, resolution) {
+    const gl = this.gl;
+    if (this.volumeTexture) gl.deleteTexture(this.volumeTexture);
+    // Unit 5 always holds a complete 3D texture: the solver program is shared
+    // with the particle workspace, where no enclosure is bound.
+    if (!field) [field, resolution] = [new Uint8Array(1), 1];
+    this.containerGrid = resolution > 1 ? field : null;
+    this.containerResolution = resolution;
+    const texture = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE5);
+    gl.bindTexture(gl.TEXTURE_3D, texture);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage3D(
+      gl.TEXTURE_3D,
+      0,
+      gl.R8,
+      resolution,
+      resolution,
+      resolution,
+      0,
+      gl.RED,
+      gl.UNSIGNED_BYTE,
+      field,
+    );
+    for (const key of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER])
+      gl.texParameteri(gl.TEXTURE_3D, key, gl.LINEAR);
+    for (const axis of [
+      gl.TEXTURE_WRAP_S,
+      gl.TEXTURE_WRAP_T,
+      gl.TEXTURE_WRAP_R,
+    ])
+      gl.texParameteri(gl.TEXTURE_3D, axis, gl.CLAMP_TO_EDGE);
+    gl.activeTexture(gl.TEXTURE0);
+    this.volumeTexture = texture;
+  }
+  contained() {
+    return !!(this.containerGrid && this.container);
+  }
+  // Enclosure local space to world, matching containModel() in the solver.
+  containerToWorld(q) {
+    const { position, rotation, scale } = this.container;
+    const [rx, ry, rz] = rotation.map((d) => (d * Math.PI) / 180);
+    let [x, y, z] = q.map((n, i) => n * scale[i]);
+    [y, z] = [
+      Math.cos(rx) * y - Math.sin(rx) * z,
+      Math.sin(rx) * y + Math.cos(rx) * z,
+    ];
+    [x, z] = [
+      Math.cos(ry) * x + Math.sin(ry) * z,
+      -Math.sin(ry) * x + Math.cos(ry) * z,
+    ];
+    [x, y] = [
+      Math.cos(rz) * x - Math.sin(rz) * y,
+      Math.sin(rz) * x + Math.cos(rz) * y,
+    ];
+    return [x + position[0], y + position[1], z + position[2]];
+  }
+  seedInside(rand) {
+    const grid = this.containerGrid,
+      r = this.containerResolution;
+    for (let attempt = 0; attempt < 24; attempt++) {
+      const q = [rand() * 2 - 1, rand() * 2 - 1, rand() * 2 - 1];
+      const [i, j, k] = q.map((n) =>
+        Math.min(r - 1, Math.max(0, Math.floor((n * 0.5 + 0.5) * r))),
+      );
+      if (grid[i + r * (j + r * k)] > 200) return this.containerToWorld(q);
+    }
+    return this.containerToWorld([0, 0, 0]);
+  }
+  containUniforms(prog) {
+    const held = this.contained();
+    this.set(prog, {
+      uContain: held ? 1 : 0,
+      uContainPush: held ? this.container.containment : 0,
+      uContainPos: held ? this.container.position : [0, 0, 0],
+      uContainRot: held ? this.container.rotation : [0, 0, 0],
+      uContainScale: held ? this.container.scale : [1, 1, 1],
+    });
+    this.uniform(prog, "uVolume", 5, "int");
+  }
   fields(prog, fields) {
     const pos = new Float32Array(48),
       extra = new Float32Array(48),
@@ -294,13 +381,17 @@ export class Engine {
       this.resize(w, h);
     if (this.count !== Math.round(c.count)) this.reset(c);
     const frameDt = this.paused ? 0 : Math.min(delta, 0.1) * c.speed;
+    // A simulation loaded into a glass enclosure steps on the same fixed clock
+    // as the particle workspace, so the solver behaves identically in both.
+    const stepping =
+      this.mode === "particles" || (this.mode === "glass" && this.contained());
     this.simAccumulator = Math.min(
-      (this.simAccumulator || 0) + (this.mode === "particles" ? frameDt : 0),
+      (this.simAccumulator || 0) + (stepping ? frameDt : 0),
       8 / 120,
     );
     const simSteps = this.paused ? 0 : Math.floor(this.simAccumulator * 120);
-    const dt = this.mode === "particles" ? simSteps / 120 : frameDt;
-    if (this.mode === "particles") this.simAccumulator -= dt;
+    const dt = stepping ? simSteps / 120 : frameDt;
+    if (stepping) this.simAccumulator -= dt;
     this.time += dt;
     this.tick += dt;
     const rotation = c.rotation + this.time * c.autoRotate;
@@ -317,10 +408,16 @@ export class Engine {
       uHue: c.hue,
       uSpeciesEnabled: c.speciesEnabled,
     };
+    // Particles project through the enclosure's camera while they are inside it,
+    // so a point and a mesh vertex at the same place land on the same pixel.
+    const camera =
+      this.mode === "glass"
+        ? { uEye: 4, uProjScale: 2.5 }
+        : { uEye: 4.5, uProjScale: 2 };
     gl.viewport(0, 0, w, h);
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.BLEND);
-    if (this.mode === "particles") {
+    const simulate = () => {
       for (let step = 0; step < simSteps; step++) {
         if (c.speciesEnabled) {
           this.speciesField.render();
@@ -350,6 +447,8 @@ export class Engine {
           uSpeciesLift: [c.speciesLiftA, c.speciesLiftB, c.speciesLiftC],
         });
         this.uniform(this.sim, "uDensity", 2, "int");
+        this.set(this.sim, camera);
+        this.containUniforms(this.sim);
         this.fields(this.sim, this.fieldList || []);
         gl.bindVertexArray(this.vaos[this.read]);
         gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, this.feedback);
@@ -367,6 +466,9 @@ export class Engine {
         gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, null);
         this.read = 1 - this.read;
       }
+    };
+    if (this.mode === "particles") {
+      simulate();
       if (!this.paused || !this.rendered || this.previousConfig !== c) {
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.targets[1 - this.trailRead].fb);
         gl.bindVertexArray(this.emptyVAO);
@@ -382,6 +484,7 @@ export class Engine {
         gl.blendFunc(gl.ONE, gl.ONE);
         this.set(this.particles, {
           ...shared,
+          ...camera,
           uLife: c.life,
           uSize: c.size,
           uPixelRatio: w / rect.width,
@@ -395,6 +498,8 @@ export class Engine {
         this.previousConfig = c;
       }
     } else if (this.mode === "glass") {
+      const held = this.contained();
+      if (held) simulate();
       this.objectsRenderer.render(
         this.objects || [],
         c,
@@ -402,6 +507,19 @@ export class Engine {
         w,
         h,
         this.targets[this.trailRead].fb,
+        held &&
+          (() => {
+            this.set(this.particles, {
+              ...shared,
+              ...camera,
+              uLife: c.life,
+              uSize: c.size,
+              uPixelRatio: w / rect.width,
+            });
+            this.fields(this.particles, this.fieldList || []);
+            gl.bindVertexArray(this.vaos[this.read]);
+            gl.drawArrays(gl.POINTS, 0, this.count);
+          }),
       );
     } else if (this.mode === "orb" && c.family > 0) {
       if (this.mode === "orb" && c.family === 2)
@@ -524,6 +642,7 @@ export class Engine {
     this.chemistry?.dispose();
     this.speciesField?.dispose();
     this.objectsRenderer?.dispose();
+    if (this.volumeTexture) this.gl.deleteTexture(this.volumeTexture);
     this.programs.forEach((p) => gl.deleteProgram(p));
     this.buffers.forEach((b) => gl.deleteBuffer(b));
     this.vaos.forEach((v) => gl.deleteVertexArray(v));

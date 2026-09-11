@@ -6,7 +6,10 @@ import {
   initialGraph,
   validateProject,
   resolveGraph,
+  fitSimulation,
+  controls,
 } from "./project.js";
+import { newObject } from "./objects/model.js";
 const fixture = () => ({
   format: "boast-project",
   version: 1,
@@ -201,4 +204,63 @@ test("composed shader families round trip and reject invalid operators", () => {
     invalid.config[key] = value;
     assert.throws(() => validateProject(invalid));
   }
+});
+
+test("a contained particle simulation names a glass shell and survives a round trip", () => {
+  const shell = newObject(
+    "Vessel",
+    [0, 0, 0, 1, 0, 0, 0, 1, 0],
+    [0.2, 0.2, 0.2],
+    {},
+  );
+  const p = { ...fixture(), mode: "glass", objects: [shell] };
+  p.particleContainer = shell.id;
+  assert.equal(
+    validateProject(JSON.parse(JSON.stringify(p))).particleContainer,
+    shell.id,
+  );
+  // A container that is not a glass shell in the scene is dropped, not trusted.
+  assert.equal(
+    validateProject({ ...p, particleContainer: "no-such-object" })
+      .particleContainer,
+    undefined,
+  );
+  assert.equal(
+    validateProject({
+      ...p,
+      objects: [{ ...shell, role: "surface" }],
+    }).particleContainer,
+    undefined,
+  );
+  assert.throws(() => validateProject({ ...p, particleContainer: 7 }));
+  assert.equal(validateProject(fixture()).particleContainer, undefined);
+});
+
+test("a loaded simulation is rescaled to its enclosure instead of crushed", () => {
+  const big = {
+    ...defaults,
+    spread: 2.4,
+    depth: 1.2,
+    turbulence: 1.2,
+    frequency: 1.4,
+  };
+  const fitted = fitSimulation(big, [1, 1, 1]);
+  assert.ok(fitted.spread < big.spread, "emitter shrinks to the shell");
+  assert.ok(fitted.depth < big.depth);
+  assert.ok(
+    fitted.turbulence < big.turbulence,
+    "accelerations shrink with length",
+  );
+  assert.ok(
+    fitted.frequency > big.frequency,
+    "flow detail rises as the cloud shrinks",
+  );
+  for (const [key, value] of Object.entries(fitted))
+    if (controls[key])
+      assert.ok(
+        value >= controls[key][1] && value <= controls[key][2],
+        `${key} stays inside its control range`,
+      );
+  // A larger vessel takes a larger simulation.
+  assert.ok(fitSimulation(big, [3, 3, 3]).spread > fitted.spread);
 });

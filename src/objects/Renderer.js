@@ -255,7 +255,7 @@ export class ObjectRenderer {
     this.backDepthBuffer = this.depthRenderbuffer(0);
     this.back = this.colorTarget(g.NEAREST, this.backDepthBuffer);
   }
-  render(objects, config, shared, w, h, target) {
+  render(objects, config, shared, w, h, target, drawContents) {
     const e = this.engine,
       g = e.gl;
     this.sync(objects);
@@ -327,6 +327,9 @@ export class ObjectRenderer {
     objects
       .filter((o) => o.visible && o.role !== "glass")
       .forEach((o) => draw(o, this.dots, true));
+    // A live simulation loaded into an enclosure joins the dots as contents the
+    // shells refract, under the same additive blend.
+    if (drawContents) drawContents();
     g.disable(g.BLEND);
     // Camera-space depth of each origin: the vertex shader tilts, then rotates.
     const cameraZ = (p) =>

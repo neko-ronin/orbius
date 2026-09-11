@@ -310,3 +310,50 @@ export function smoothNormals(triangles) {
   });
   return out;
 }
+export const VOLUME_RESOLUTION = 48;
+// Occupancy of the mesh interior on a cube grid, for confining a live particle
+// simulation. Softened by one box-blur pass so the gradient near the wall has a
+// direction to push along instead of a binary step.
+export function volumeField(triangles, resolution = VOLUME_RESOLUTION) {
+  const columns = meshColumns(triangles, resolution),
+    step = 2 / resolution,
+    size = resolution ** 3,
+    solid = new Uint8Array(size);
+  // meshColumns rasterizes crossings along x for each (y, z) cell.
+  for (let y = 0; y < resolution; y++)
+    for (let z = 0; z < resolution; z++) {
+      const xs = columns[y * resolution + z];
+      for (let k = 0; k + 1 < xs.length; k += 2) {
+        const from = Math.max(0, Math.ceil((xs[k] + 1) / step - 0.5031)),
+          to = Math.min(
+            resolution - 1,
+            Math.floor((xs[k + 1] + 1) / step - 0.5031),
+          );
+        for (let x = from; x <= to; x++)
+          solid[x + resolution * (y + resolution * z)] = 255;
+      }
+    }
+  if (!solid.some((v) => v))
+    throw Error("This mesh encloses no interior volume.");
+  const field = new Uint8Array(size);
+  const at = (x, y, z) =>
+    x < 0 ||
+    y < 0 ||
+    z < 0 ||
+    x >= resolution ||
+    y >= resolution ||
+    z >= resolution
+      ? 0
+      : solid[x + resolution * (y + resolution * z)];
+  for (let z = 0; z < resolution; z++)
+    for (let y = 0; y < resolution; y++)
+      for (let x = 0; x < resolution; x++) {
+        let total = 0;
+        for (let dz = -1; dz <= 1; dz++)
+          for (let dy = -1; dy <= 1; dy++)
+            for (let dx = -1; dx <= 1; dx++)
+              total += at(x + dx, y + dy, z + dz);
+        field[x + resolution * (y + resolution * z)] = Math.round(total / 27);
+      }
+  return { field, resolution };
+}

@@ -53,10 +53,39 @@ export const defaults = {
   devScale: 0.7,
   showScale: 1.5,
   backdrop: 0.55,
+  containment: 1.2,
 };
+// The parameters a saved particle project carries into a glass enclosure. Trail,
+// camera, and scene finish stay with the enclosure's own composition.
+export const simulationKeys = [
+  "count",
+  "size",
+  "speed",
+  "life",
+  "spread",
+  "spin",
+  "turbulence",
+  "frequency",
+  "drag",
+  "gravity",
+  "depth",
+  "arms",
+  "twist",
+  "palette",
+  "hue",
+  ...Object.keys(speciesDefaults),
+];
 export const controls = {
   ...materialControls,
   ...speciesControls,
+  containment: [
+    "Containment force",
+    0.2,
+    4,
+    0.05,
+    "How hard the enclosure holds the loaded particle simulation inside its walls. Low values let energetic material bulge through thin sections; high values pin it to the surface.",
+    "particle boundary collision response",
+  ],
   backdrop: [
     "Studio backdrop",
     0,
@@ -538,6 +567,25 @@ export function resolveGraph(graph, config) {
     active: chain.map((n) => n.id),
   };
 }
+// A saved simulation is authored at stage scale; an enclosure is roughly a unit
+// sphere. Rescale it to the vessel instead of crushing it against the walls:
+// lengths shrink with the emitter, accelerations shrink with them, and the flow
+// field's frequency rises so the pattern keeps its shape relative to the cloud.
+export function fitSimulation(config, scale) {
+  const radius = Math.max(0.05, Math.min(...scale));
+  const clamp = (key, value) =>
+    Math.min(controls[key][2], Math.max(controls[key][1], value));
+  const spread = clamp("spread", 0.5 * radius);
+  const k = spread / Math.max(0.01, config.spread);
+  return {
+    ...config,
+    spread,
+    depth: clamp("depth", config.depth * k),
+    turbulence: clamp("turbulence", config.turbulence * k),
+    gravity: clamp("gravity", config.gravity * k),
+    frequency: clamp("frequency", config.frequency / k),
+  };
+}
 export function validateProject(data) {
   if (!data || data.format !== "boast-project" || data.version !== 1)
     throw Error("This is not a supported BOAST project (version 1).");
@@ -572,6 +620,13 @@ export function validateProject(data) {
       throw Error(`Invalid ${key}.`);
     config[key] = value;
   }
+  const particleContainer = data.particleContainer;
+  if (
+    particleContainer !== undefined &&
+    particleContainer !== null &&
+    (typeof particleContainer !== "string" || particleContainer.length > 80)
+  )
+    throw Error("Invalid particle container.");
   if (typeof data.shader !== "string" || data.shader.length > 20000)
     throw Error("Shader must be text under 20,000 characters.");
   if (
@@ -660,6 +715,8 @@ export function validateProject(data) {
     )
       throw Error("Invalid field.");
     else fieldIds.add(f.id);
+  const objects =
+    data.objects !== undefined ? validateObjects(data.objects) : [];
   return {
     format: "boast-project",
     version: 1,
@@ -675,8 +732,10 @@ export function validateProject(data) {
       : {}),
     graph: structuredClone(graph),
     fields: structuredClone(fields),
-    ...(data.objects !== undefined
-      ? { objects: validateObjects(data.objects) }
+    ...(data.objects !== undefined ? { objects } : {}),
+    // Only kept when it names a glass shell that is actually in the scene.
+    ...(objects.some((o) => o.id === particleContainer && o.role === "glass")
+      ? { particleContainer }
       : {}),
   };
 }

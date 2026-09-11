@@ -92,7 +92,8 @@ const particleRecipes = [
 ];
 function App() {
   const [objects, setObjects] = useState([]),
-    [selectedObject, setSelectedObject] = useState(null);
+    [selectedObject, setSelectedObject] = useState(null),
+    [particleContainer, setParticleContainer] = useState(null);
   const objectHistory = useRef([]);
   function changeObjects(next) {
     objectHistory.current = [...objectHistory.current.slice(-19), objects];
@@ -226,6 +227,7 @@ function App() {
     show,
     paused,
     tool,
+    particleContainer,
   };
   const recipes = useMemo(
     () =>
@@ -272,6 +274,9 @@ function App() {
   }, []);
   useEffect(() => {
     if (engine.current) {
+      const shell = objects.find(
+        (o) => o.id === particleContainer && o.role === "glass" && o.visible,
+      );
       Object.assign(engine.current, {
         config: resolved.config,
         mode: resolved.mode,
@@ -279,9 +284,18 @@ function App() {
         paused,
         fieldList: fields,
         objects,
+        // Transforms track the shell live, so moving it carries the contents.
+        container: shell
+          ? {
+              position: shell.position,
+              rotation: shell.rotation,
+              scale: shell.scale,
+              containment: resolved.config.containment,
+            }
+          : null,
       });
     }
-  }, [resolved, show, paused, fields, objects]);
+  }, [resolved, show, paused, fields, objects, particleContainer]);
   useEffect(() => {
     let cancelled = false;
     readStored("autosave")
@@ -333,7 +347,17 @@ function App() {
       }
     }, 1500);
     return () => clearTimeout(id);
-  }, [config, mode, graph, compiled, shader, fields, name, objects]);
+  }, [
+    config,
+    mode,
+    graph,
+    compiled,
+    shader,
+    fields,
+    name,
+    objects,
+    particleContainer,
+  ]);
   function project() {
     const s = latest.current;
     return {
@@ -347,7 +371,75 @@ function App() {
       shaderDraft: s.shader,
       graph: s.graph,
       fields: s.fields.filter((f) => f.type !== "burst"),
+      ...(s.particleContainer
+        ? { particleContainer: s.particleContainer }
+        : {}),
     };
+  }
+  // The occupancy grid is derived from the mesh, so projects store the shell's
+  // id and rebuild the field on open rather than carrying a megabyte of voxels.
+  function buildContainerField(list, id, nextConfig) {
+    const shell = list.find((o) => o.id === id && o.role === "glass");
+    if (!shell || !engine.current) {
+      engine.current?.setContainer(null);
+      return;
+    }
+    const w = new Worker(
+      new URL("./objects/import.worker.js", import.meta.url),
+      {
+        type: "module",
+      },
+    );
+    w.onmessage = ({ data: result }) => {
+      w.terminate();
+      if (result.error) {
+        setParticleContainer(null);
+        engine.current?.setContainer(null);
+        notify(`Could not confine the simulation: ${result.error}`);
+        return;
+      }
+      engine.current.container = {
+        position: shell.position,
+        rotation: shell.rotation,
+        scale: shell.scale,
+        containment: nextConfig.containment,
+      };
+      engine.current.setContainer(result.field, result.resolution);
+      engine.current.reset(nextConfig);
+    };
+    w.onerror = () => {
+      w.terminate();
+      setParticleContainer(null);
+      engine.current?.setContainer(null);
+      notify("Could not prepare this enclosure for a simulation.");
+    };
+    w.postMessage({ triangles: shell.triangles, role: "field" });
+  }
+  function onSimulation(payload) {
+    if (!payload) {
+      setParticleContainer(null);
+      engine.current?.setContainer(null);
+      engine.current?.reset(latest.current.config);
+      setDirty(true);
+      notify("Enclosure emptied.");
+      return;
+    }
+    const nextConfig = { ...latest.current.config, ...payload.config };
+    setConfig(nextConfig);
+    setParticleContainer(payload.container);
+    setDirty(true);
+    const shell = latest.current.objects.find(
+      (o) => o.id === payload.container,
+    );
+    if (!shell || !engine.current) return;
+    engine.current.container = {
+      position: shell.position,
+      rotation: shell.rotation,
+      scale: shell.scale,
+      containment: nextConfig.containment,
+    };
+    engine.current.setContainer(payload.field, payload.resolution);
+    engine.current.reset(nextConfig);
   }
   function apply(data) {
     try {
@@ -366,7 +458,11 @@ function App() {
       setName(p.name);
       setPreset(-1);
       setDirty(false);
+      setParticleContainer(p.particleContainer ?? null);
+      engine.current?.setContainer(null);
       engine.current?.reset(p.config);
+      if (p.particleContainer)
+        buildContainerField(p.objects || [], p.particleContainer, p.config);
       setRecover(null);
       notify("Project restored.");
     } catch (e) {
@@ -1094,6 +1190,8 @@ function App() {
                     selected={selectedObject}
                     onSelect={setSelectedObject}
                     notify={notify}
+                    particleContainer={particleContainer}
+                    onSimulation={onSimulation}
                   />
                   <button
                     className="object-undo"
@@ -1131,6 +1229,26 @@ function App() {
                       "Studio & finish",
                       ["backdrop", "bloom", "exposure", "grain", "vignette"],
                     ],
+                    ...(particleContainer
+                      ? [
+                          [
+                            "Contained simulation",
+                            [
+                              "containment",
+                              "count",
+                              "size",
+                              "speed",
+                              "turbulence",
+                              "drag",
+                              "spin",
+                              "gravity",
+                              "spread",
+                              "frequency",
+                              "life",
+                            ],
+                          ],
+                        ]
+                      : []),
                     ["Render quality", ["devScale", "showScale"]],
                   ]
                 : resolved.mode === "orb" && config.family > 0

@@ -24,6 +24,34 @@ Supported inputs: OBJ positions/faces, including negative indices and triangulat
 - `src/studio/storage.js`: IndexedDB autosave and collection storage, with legacy localStorage reads.
 - `src/project.js`: portable project validation, including embedded object geometry.
 
+## Contained particle simulations
+
+Select a glass shell and choose **Load particle simulation** to open a saved
+`.boast.json` particle project. Its solver parameters come across and its
+particles run live inside that shell, as contents the glass refracts alongside any
+dots or strata. One enclosure holds a simulation at a time; **Empty this
+enclosure** releases it.
+
+The shell is voxelized into an occupancy grid (48³, one box-blur pass) in the
+import worker. The solver samples that grid in local space each step and pushes
+escaping particles back along its gradient, so concave and imported meshes confine
+correctly, not just a fitted sphere. **Containment force** under Contained
+simulation sets how hard. Particles seed inside the volume by rejection sampling,
+both on the CPU at reset and on the GPU when one ages out.
+
+A saved simulation is authored at stage scale and an enclosure is roughly a unit
+sphere, so the emitter, its depth, and the accelerations are rescaled to the
+vessel on load, with the flow frequency raised to match — otherwise the cloud is
+simply crushed against the walls. The fitted values are ordinary controls
+afterwards. Placed fields do not travel with the simulation; they are a
+screen-space stage tool and would need their own port. The enclosure's transform
+drives the confinement live, so moving the vessel carries the contents, but as a
+force rather than a rigid attachment: fast moves leave the cloud sloshing.
+
+Projects store the enclosure's id, not the voxel grid, and rebuild the field from
+the mesh on open. Particle counts, positions, and elapsed time are a recipe, not a
+resumable GPU snapshot, as everywhere else in BOAST.
+
 ## Rendering and persistence
 
 Glass uses smooth geometry normals, a measured back-face depth pass, a camera-locked analytic studio rig (key box, two strips, floor bounce, grazing sheen), tint absorption, spectral separation, and rough screen-space transmission of the dot layer. A **Studio backdrop** scene control draws the sweep those optics refract; zero returns the stage to black space. Four **optical finish** presets set the seven glass controls as a group. Objects draw into a multisampled accumulator, so shell silhouettes are antialiased; the sample count steps down on large targets and falls back to none where the GPU will not allocate it. Shells composite back to front by camera-space origin depth and share one depth buffer, so a nearer shell occludes a farther one per pixel and refracts everything already behind it — the dot layer, the backdrop, and other shells. Dispersion is smeared across the transmission blur samples rather than taken as three fixed RGB taps, and refracted lookups that leave the screen fade back to looking straight through instead of streaking the border pixel. It is an artistic real-time approximation, not a spectral path tracer: each shell still bends what is behind it with a single screen-space offset rather than tracing a ray through successive dielectric boundaries, and the sort key is the object origin, so deeply interpenetrating shells can still order wrongly as objects even where the depth buffer resolves the pixels. Dot objects are luminous point clouds, with surface, filled-volume, and procedural-strata modes. Strata have reproducible terrain recipes and per-point motion intervals clipped to the original mesh.
