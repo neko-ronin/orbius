@@ -205,12 +205,16 @@ test("legacy objects acquire optics defaults and reject malformed new material p
     {},
   );
   delete object.thickness;
+  delete object.defects;
   assert.equal(validateObjects([object])[0].thickness, objectOptics.thickness);
+  assert.equal(validateObjects([object])[0].defects, objectOptics.defects);
   for (const value of [
     { dispersion: 5 },
     { colorTop: "bad" },
     { studioLight: NaN },
     { thickness: -1 },
+    { defects: 2 },
+    { inclusions: -0.1 },
   ])
     assert.throws(() => validateObjects([{ ...object, ...value }]));
 });

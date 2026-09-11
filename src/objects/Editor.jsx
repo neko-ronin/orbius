@@ -24,6 +24,8 @@ const glassFinishes = [
       absorption: 0.18,
       opacity: 0.12,
       studioLight: 2.3,
+      defects: 0.3,
+      inclusions: 0.12,
     },
   ],
   [
@@ -36,6 +38,8 @@ const glassFinishes = [
       absorption: 0.5,
       opacity: 0.3,
       studioLight: 2,
+      defects: 0.55,
+      inclusions: 0.28,
     },
   ],
   [
@@ -48,6 +52,8 @@ const glassFinishes = [
       absorption: 0.25,
       opacity: 0.14,
       studioLight: 2.7,
+      defects: 0.22,
+      inclusions: 0.35,
     },
   ],
   [
@@ -60,6 +66,8 @@ const glassFinishes = [
       absorption: 1.6,
       opacity: 0.55,
       studioLight: 1.7,
+      defects: 0.65,
+      inclusions: 0.45,
     },
   ],
 ];
@@ -329,6 +337,10 @@ export default function ObjectEditor({
             "Brightness of the reflected studio lights. Clear glass needs something bright to reflect.",
           absorption:
             "How strongly the tint filters transmitted light. Thick regions absorb more.",
+          defects:
+            "Surface irregularity: forming waviness, orange peel, and a scratch field, plus uneven wall thickness. Seeded from the object, so it stays put.",
+          inclusions:
+            "Seeds and bubbles suspended in the body. They sit at depth and slide against the surface as the camera moves.",
           roughness:
             "Softens studio reflections and blurs the transmitted interior. Keep low for crisp dots.",
           billow:
@@ -552,6 +564,8 @@ export default function ObjectEditor({
               {range("dispersion", "Spectral dispersion", 0, 0.2, 0.005)}
               {range("absorption", "Tint absorption", 0, 3, 0.05)}
               {range("studioLight", "Studio light", 0, 5, 0.05)}
+              {range("defects", "Surface defects", 0, 1, 0.01)}
+              {range("inclusions", "Bubbles & seeds", 0, 1, 0.01)}
             </>
           ) : (
             <>

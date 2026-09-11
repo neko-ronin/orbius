@@ -1,6 +1,13 @@
 import { objectOptics } from "./model.js";
 import { smoothNormals } from "./geometry.js";
 import { quadVertex } from "../shaders.js";
+// Defects are keyed to the object's identity, so a given vessel keeps the same
+// bubbles and scratches across sessions without storing a field of them.
+const seedOf = (id) => {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 9973;
+  return h * 0.017;
+};
 const FOOTPRINT = 256;
 const STAGE_EXTENT = 5;
 const transforms = `
@@ -94,18 +101,51 @@ void main(){vec2 ndc=uv*2.-1.;
  frag=vec4(stage(eye,dir,uStageFloor,uStageRoughness,uBackdrop),1.);}`;
 const backDepth = `#version 300 es
 precision highp float;in float vDepth;out vec4 frag;void main(){frag=vec4(vDepth/16.,0,0,1);}`;
+// Real glass is never the ideal solid. The surface keeps the waviness of how it
+// was formed and the scratches of having been handled, and the body keeps the
+// seeds the furnace left behind. Flawlessness is the loudest tell of a render.
+const flaws = `
+float hash3(vec3 p){return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453);}
+float vnoise(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+ vec4 a=vec4(hash3(i),hash3(i+vec3(1,0,0)),hash3(i+vec3(0,1,0)),hash3(i+vec3(1,1,0)));
+ vec4 b=vec4(hash3(i+vec3(0,0,1)),hash3(i+vec3(1,0,1)),hash3(i+vec3(0,1,1)),hash3(i+vec3(1,1,1)));
+ vec4 m=mix(a,b,f.z);
+ return mix(mix(m.x,m.y,f.x),mix(m.z,m.w,f.x),f.y);}
+// The slope of the noise, which is the direction the surface should tilt along.
+vec3 wobble(vec3 p,float f){float e=.07,c=vnoise(p*f);
+ return (vec3(vnoise(p*f+vec3(e,0,0)),vnoise(p*f+vec3(0,e,0)),vnoise(p*f+vec3(0,0,e)))-c)/e;}
+// One seed per cell, jittered, most of them too small to see. A bubble never
+// spans a cell, so the neighbouring cells never have to be checked.
+float seed(vec3 p,float size){vec3 i=floor(p),f=fract(p);
+ vec3 c=vec3(hash3(i),hash3(i+11.3),hash3(i+23.7))*.6+.2;
+ // Cube the draw: a real melt leaves a few big seeds and a great many specks,
+ // where a flat distribution reads as evenly sprinkled dots.
+ float h=hash3(i+37.1);float r=size*(.06+.94*h*h*h);
+ return 1.-smoothstep(r*.45,r,length(f-c));}
+`;
 const glass = `#version 300 es
-precision highp float;in vec3 vNormal,vView;in float vDepth;out vec4 frag;
+precision highp float;in vec3 vNormal,vView,vLocal;in float vDepth;out vec4 frag;
 uniform sampler2D uContents,uBackDepth;uniform vec2 uResolution;uniform vec3 uTint;
 uniform float uOpacity,uIor,uRoughness,uThickness,uDispersion,uStudioLight,uAbsorption,uZoom,uAspect,uSamples;
-uniform float uTilt,uRotation,uStageFloor,uStageRoughness;
+uniform float uTilt,uRotation,uStageFloor,uStageRoughness,uDefects,uInclusions,uSeed;
+uniform vec3 uRotationObject,uScale;
+${transforms}
+${flaws}
 ${world}
-void main(){vec3 n=normalize(vNormal),view=normalize(-vView);float nv=max(.001,dot(n,view));
+void main(){vec3 n=normalize(vNormal),view=normalize(-vView);
+ mat3 body=viewMatrix(uTilt,uRotation)*modelMatrix(uRotationObject);
+ vec3 q=vLocal*2.+uSeed;
+ // Three scales at once: the lens-like waviness of forming, orange peel, and the
+ // scratch field. One octave alone reads as a pattern rather than as wear.
+ if(uDefects>0.){vec3 g=wobble(q,1.4)*.13+wobble(q,7.)*.03+wobble(q,31.)*.006;
+  n=normalize(n-body*(g/max(uScale,.05))*uDefects);}
+ float nv=max(.001,dot(n,view));
  float f0=pow((uIor-1.)/(uIor+1.),2.);float f=f0+(1.-f0)*pow(1.-nv,5.);
  vec2 uv=gl_FragCoord.xy/uResolution;
  float exitDepth=texture(uBackDepth,uv).r;
  float chord=exitDepth>.999 ? .15 : max(.02,exitDepth*16.-vDepth);
- float thickness=chord*uThickness;
+ // Uneven walls: the reason a real vessel magnifies unevenly as it turns.
+ float thickness=chord*uThickness*(1.+(vnoise(q*.9)-.5)*uDefects*.8);
  vec3 ray=refract(-view,n,1./uIor);
  vec2 bend=(ray.xy/max(.2,abs(ray.z))+view.xy/max(.2,view.z))*thickness*vec2(2.5*uZoom/uAspect,2.5*uZoom)/max(vDepth,1.);
  vec3 contents=vec3(0.);
@@ -123,6 +163,15 @@ void main(){vec3 n=normalize(vNormal),view=normalize(-vView);float nv=max(.001,d
  if(lost>0.) tap=mix(tap,texture(uContents,clamp(uv+offset,vec2(0.),vec2(1.))).rgb,lost);
  contents+=tap;}
  contents/=uSamples;
+ // Walk the body along the refracted ray so seeds sit at depth and slide against
+ // the surface as the camera moves, instead of looking painted on.
+ if(uInclusions>0.){
+  vec3 dir=normalize(transpose(body)*ray/max(uScale,.05));
+  float len=clamp(chord/max(dot(uScale,vec3(.3333)),.05),.1,2.);
+  vec3 glow=envLight(n,.4)*uStudioLight;
+  for(int i=0;i<4;i++){
+   float b=seed((vLocal+dir*len*(float(i)+.5)*.25)*7.+uSeed,.06+.24*uInclusions)*uInclusions;
+   contents=mix(contents,vec3(.015)+glow*b*.35,b*.85);}}
  vec3 absorption=exp(-max(vec3(.001),vec3(1.)-uTint)*(uAbsorption+uOpacity)*thickness*4.);
  // Reflect the room, not just the rig: the floor wrapping into the underside of a
  // shell is most of what puts an object on a surface rather than in a void. The
@@ -408,6 +457,9 @@ export class ObjectRenderer {
         uFlow: o.flow,
         uSparkles: o.sparkles,
         uThickness: o.thickness,
+        uDefects: o.defects,
+        uInclusions: o.inclusions,
+        uSeed: seedOf(o.id),
         uDispersion: o.dispersion,
         uStudioLight: o.studioLight,
         uStageFloor: config.stageFloor,

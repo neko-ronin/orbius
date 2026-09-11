@@ -60,14 +60,32 @@ It works for any mesh, including imports, because it is just coverage. Its offse
 currently a constant matched to the key light's azimuth; when the rig becomes
 data-driven that constant should derive from the key light instead.
 
-Not yet done from the realism list: glass defects (surface waviness, inclusions,
-micro-scratches, uneven wall thickness), a data-driven light rig with per-light
-placement, size, Kelvin and intensity, the object's own reflection in the floor, and
-temporal drift in the lighting. The environment is procedural by necessity — the
-project ships no external assets — so a convincing studio is reachable and a
-photographic one is not.
+### Defects
 
-Lighting is one studio rig (`envLight`): a graded sky, a large soft key box, a wide cool strip and a narrow warm strip that read as vertical highlights on a curved shell, and a floor bounce. Roughness widens every one of them. A grazing sheen term adds the thin bright edge a shell shows against a dark studio. **Studio backdrop** (scene finish) draws a dark sweep behind the objects so refraction and reflection have a world to show; set it to zero for black-space, dendrite-style compositions. Four **optical finish** presets — Clear, Frosted, Prism, Smoked — set the seven optical controls together, since no single slider produces a finish on its own.
+Being flawless is the loudest tell that a render is a render. **Surface defects**
+tilts the shading normal by the slope of three noise octaves at once — the lens-like
+waviness of forming, orange peel, and a scratch field — and modulates optical
+thickness with a fourth, so a vessel magnifies unevenly as it turns. One octave alone
+reads as a pattern rather than as wear.
+
+**Bubbles & seeds** walks the body along the refracted ray and samples a cell field,
+one seed per cell, jittered. Because a bubble never spans a cell, the neighbouring
+cells never have to be checked — four taps total. The radius draw is cubed, since a
+real melt leaves a few big seeds and a great many specks; a flat distribution reads as
+evenly sprinkled dots. Marching along the ray rather than the surface is what makes
+the seeds sit at depth and slide against the silhouette as the camera moves.
+
+Both fields are keyed to a hash of the object's id, so a given vessel keeps its own
+bubbles and scratches across sessions without storing a field of them, and duplicating
+an object gives the copy its own flaws.
+
+Not yet done from the realism list: a data-driven light rig with per-light placement,
+size, Kelvin and intensity, the object's own reflection in the floor, and temporal
+drift in the lighting. The environment is procedural by necessity — the project ships
+no external assets — so a convincing studio is reachable and a photographic one is
+not.
+
+Lighting is one studio rig (`envLight`): a graded sky, a large soft key box, a wide cool strip and a narrow warm strip that read as vertical highlights on a curved shell, and a floor bounce. Roughness widens every one of them. A grazing sheen term adds the thin bright edge a shell shows against a dark studio. **Studio backdrop** (scene finish) draws a dark sweep behind the objects so refraction and reflection have a world to show; set it to zero for black-space, dendrite-style compositions. Four **optical finish** presets — Clear, Frosted, Prism, Smoked — set the nine optical controls together, defects and seeds included,, since no single slider produces a finish on its own.
 
 Objects draw into a multisampled accumulator (4x, dropping to 2x above two megapixels, and to none if the GPU refuses the allocation), which is what gives the shell silhouettes clean edges; the fragment shader still runs once per pixel, so only the resolve is added cost.
 
