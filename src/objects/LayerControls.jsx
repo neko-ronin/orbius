@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { layerDefaults, layerControls } from "./layers.js";
-export default function LayerControls({ object, busy, onBuild }) {
+import Control from "../studio/Control.jsx";
+export default function LayerControls({ object, busy, onBuild, tip }) {
   const [draft, setDraft] = useState(object.layerSettings ?? layerDefaults);
   useEffect(
     () => setDraft(object.layerSettings ?? layerDefaults),
@@ -14,25 +15,16 @@ export default function LayerControls({ object, busy, onBuild }) {
         Build terrain inside this mesh. Each sheet is a field of dots; the shell
         clips its edges.
       </p>
-      {Object.entries(layerControls).map(
-        ([key, [label, min, max, step, hint]]) => (
-          <label className="object-slider" key={key} title={hint}>
-            <span>
-              {label}
-              <output>{draft[key]}</output>
-            </span>
-            <input
-              aria-label={label}
-              type="range"
-              min={min}
-              max={max}
-              step={step}
-              value={draft[key]}
-              onChange={(e) => setDraft({ ...draft, [key]: +e.target.value })}
-            />
-          </label>
-        ),
-      )}
+      {Object.entries(layerControls).map(([key, entry]) => (
+        <Control
+          key={key}
+          id={`layer-${key}`}
+          entry={entry}
+          value={draft[key]}
+          onChange={(next) => setDraft({ ...draft, [key]: next })}
+          tip={tip}
+        />
+      ))}
       <p className="mesh-formats">
         Up to {budget.toLocaleString()} dots before clipping · 120,000 maximum
       </p>

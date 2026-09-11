@@ -18,6 +18,7 @@ export const composerControls = {
     1,
     0.01,
     "Blends in the second field or controls how deeply it masks or carves the first.",
+    "signed distance field blending operations",
   ],
   fieldOffset: [
     "Field offset",
@@ -25,6 +26,7 @@ export const composerControls = {
     3,
     0.01,
     "Moves the second field through the first. Watch crossings appear and disappear.",
+    "domain offset signed distance field",
   ],
   fieldRatio: [
     "Relative frequency",
@@ -32,6 +34,7 @@ export const composerControls = {
     3,
     0.01,
     "Changes the second field scale independently. Try 1.7 for a finer structure around broad folds.",
+    "frequency ratio procedural noise",
   ],
   fieldWidth: [
     "Ribbon width",
@@ -39,6 +42,7 @@ export const composerControls = {
     0.2,
     0.005,
     "Thickness of the luminous material. Fine ribbons reveal negative space; thicker ribbons feel cloudlike.",
+    "isosurface thickness volumetric raymarching",
   ],
   fieldColor: [
     "Color travel",
@@ -46,6 +50,7 @@ export const composerControls = {
     2,
     0.01,
     "How quickly colors change through the volume. Zero gives a restrained gradient.",
+    "colour ramp volumetric rendering",
   ],
 };
 export const fieldNames = [

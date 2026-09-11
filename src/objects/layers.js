@@ -16,6 +16,7 @@ export const layerControls = {
     24,
     1,
     "Separate terrain sheets. More sheets add depth; leave enough spacing to read each one.",
+    "procedural terrain layers stratigraphy",
   ],
   resolution: [
     "Dots per axis",
@@ -23,6 +24,7 @@ export const layerControls = {
     96,
     4,
     "Sampling detail across each sheet. Higher values resolve fine ripples and cost more memory.",
+    "heightfield sampling resolution",
   ],
   relief: [
     "Relief",
@@ -30,6 +32,7 @@ export const layerControls = {
     0.6,
     0.01,
     "Height of peaks and valleys. Try 0.2 for rolling terrain, 0.5 for dramatic folds.",
+    "terrain relief amplitude heightmap",
   ],
   frequency: [
     "Terrain frequency",
@@ -37,6 +40,7 @@ export const layerControls = {
     6,
     0.1,
     "How many hills cross the object. Lower values make broad landscapes.",
+    "noise frequency procedural terrain",
   ],
   detail: [
     "Fine ridges",
@@ -44,6 +48,7 @@ export const layerControls = {
     1,
     0.01,
     "Adds smaller ripples to the main terrain. Keep this below 0.5 for clean contours.",
+    "fractal brownian motion octaves",
   ],
   twist: [
     "Domain twist",
@@ -51,6 +56,7 @@ export const layerControls = {
     2,
     0.05,
     "Bends the hills into winding currents. Zero gives orderly waves.",
+    "domain warping procedural noise",
   ],
   spacing: [
     "Sheet spacing",
@@ -58,6 +64,7 @@ export const layerControls = {
     0.25,
     0.005,
     "Vertical separation between sheets. Outer sheets are clipped by your mesh.",
+    "stratigraphy layer spacing geology",
   ],
   seed: [
     "Terrain seed",
@@ -65,6 +72,7 @@ export const layerControls = {
     100,
     1,
     "Changes the landscape without changing its character. The same seed always reproduces it.",
+    "random seed reproducible procedural generation",
   ],
 };
 export function validateLayers(value) {

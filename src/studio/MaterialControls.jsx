@@ -1,4 +1,5 @@
 import React from "react";
+import Control from "./Control.jsx";
 import {
   composerControls,
   fieldNames,
@@ -11,6 +12,7 @@ export default function MaterialControls({
   update,
   onStart,
   onCollect,
+  tip,
 }) {
   const select = (key, label, names) => (
     <label className="material-select" key={key}>
@@ -77,22 +79,15 @@ export default function MaterialControls({
             .filter(
               ([key]) => !["fieldA", "fieldB", "fieldOperation"].includes(key),
             )
-            .map(([key, [label, min, max, step, hint]]) => (
-              <label className="object-slider" title={hint} key={key}>
-                <span>
-                  {label}
-                  <output>{config[key]}</output>
-                </span>
-                <input
-                  type="range"
-                  aria-label={label}
-                  value={config[key]}
-                  min={min}
-                  max={max}
-                  step={step}
-                  onChange={(e) => update(key, +e.target.value)}
-                />
-              </label>
+            .map(([key, entry]) => (
+              <Control
+                key={key}
+                id={key}
+                entry={entry}
+                value={config[key]}
+                onChange={(next) => update(key, next)}
+                tip={tip}
+              />
             ))}
           <span className="eyebrow">03 / KEEP YOUR FAMILY</span>
           <p>

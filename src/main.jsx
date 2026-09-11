@@ -12,6 +12,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createRoot } from "react-dom/client";
 import Icon from "./Icons.jsx";
 import NodeEditor from "./NodeEditor.jsx";
+import Control from "./studio/Control.jsx";
 import { Engine } from "./engine.js";
 import {
   defaults,
@@ -202,13 +203,27 @@ function App() {
     [toast, setToast] = useState(""),
     [help, setHelp] = useState(false),
     [tab, setTab] = useState("parameters"),
-    [tip, setTip] = useState(null),
+    [tipEntry, setTipEntry] = useState(null),
     [recording, setRecording] = useState(false),
     [recover, setRecover] = useState(null),
     [dirty, setDirty] = useState(false);
   const workspaces = useRef({});
-  const tipTimer = useRef(),
-    canvas = useRef(),
+  const tipTimer = useRef();
+  // Every panel opens the same field-note card, so the handlers live once here and
+  // travel to whichever slider asks — including panels with their own parameter
+  // tables. The leave delay is what lets you reach the card to follow its link.
+  const tip = useRef({
+    show: (id, entry) => {
+      clearTimeout(tipTimer.current);
+      setTipEntry({ id, entry });
+    },
+    hide: () => {
+      tipTimer.current = setTimeout(() => setTipEntry(null), 250);
+    },
+    toggle: (id, entry) =>
+      setTipEntry((t) => (t?.id === id ? null : { id, entry })),
+  }).current;
+  const canvas = useRef(),
     engine = useRef(),
     file = useRef(),
     noticeTimer = useRef(),
@@ -592,7 +607,7 @@ function App() {
       if (k === "escape") {
         setShow(false);
         setHelp(false);
-        setTip(null);
+        setTipEntry(null);
         return;
       }
       if (k === " ") {
@@ -692,7 +707,7 @@ function App() {
     }
     setMode(next);
     setTab("parameters");
-    setTip(null);
+    setTipEntry(null);
     setDirty(true);
     engine.current?.clear();
   }
@@ -752,50 +767,14 @@ function App() {
         return null;
     }
     return (
-      <div className="control" key={key}>
-        <div className="control-label">
-          <button
-            onMouseEnter={() => {
-              clearTimeout(tipTimer.current);
-              setTip(key);
-            }}
-            onMouseLeave={() => {
-              tipTimer.current = setTimeout(() => setTip(null), 250);
-            }}
-            onFocus={() => setTip(key)}
-            onBlur={() => {
-              tipTimer.current = setTimeout(() => setTip(null), 250);
-            }}
-            onClick={() => setTip((t) => (t === key ? null : key))}
-            aria-label={`Learn about ${p[0]}`}
-          >
-            {p[0]}
-            <span>?</span>
-          </button>
-          <input
-            aria-label={`${p[0]} value`}
-            type="number"
-            min={p[1]}
-            max={p[2]}
-            step={p[3]}
-            value={v}
-            onChange={(e) => {
-              if (e.target.value !== "")
-                update(key, Math.max(p[1], Math.min(p[2], +e.target.value)));
-            }}
-          />
-        </div>
-        <input
-          aria-label={p[0]}
-          type="range"
-          min={p[1]}
-          max={p[2]}
-          step={p[3]}
-          value={v}
-          style={{ "--fill": `${((v - p[1]) / (p[2] - p[1])) * 100}%` }}
-          onChange={(e) => update(key, +e.target.value)}
-        />
-      </div>
+      <Control
+        key={key}
+        id={key}
+        entry={p}
+        value={v}
+        onChange={(next) => update(key, next)}
+        tip={tip}
+      />
     );
   }
   const minutes = String(Math.floor(stats.time / 60)).padStart(2, "0"),
@@ -1194,6 +1173,7 @@ function App() {
                     notify={notify}
                     particleContainer={particleContainer}
                     onSimulation={onSimulation}
+                    tip={tip}
                   />
                   <button
                     className="object-undo"
@@ -1210,6 +1190,7 @@ function App() {
                   config={config}
                   update={update}
                   onCollect={collect}
+                  tip={tip}
                   onStart={() => {
                     setConfig((c) => ({
                       ...c,
@@ -1466,23 +1447,23 @@ function App() {
         onChange={load}
         hidden
       />
-      {tip && !show && (
+      {tipEntry && !show && (
         <div
           className="parameter-tooltip"
           role="tooltip"
           onMouseEnter={() => clearTimeout(tipTimer.current)}
-          onMouseLeave={() => setTip(null)}
+          onMouseLeave={() => setTipEntry(null)}
         >
           <span>PARAMETER FIELD NOTE</span>
-          <h3>{controls[tip][0]}</h3>
-          <p>{controls[tip][4]}</p>
+          <h3>{tipEntry.entry[0]}</h3>
+          <p>{tipEntry.entry[4]}</p>
           <small>EXPLORE FURTHER</small>
           <a
-            href={`https://www.google.com/search?q=${encodeURIComponent(controls[tip][5])}`}
+            href={`https://www.google.com/search?q=${encodeURIComponent(tipEntry.entry[5])}`}
             target="_blank"
             rel="noreferrer"
           >
-            {controls[tip][5]} ↗
+            {tipEntry.entry[5]} ↗
           </a>
         </div>
       )}

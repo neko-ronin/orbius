@@ -2224,7 +2224,11 @@ input[type="color"] {
   margin: 0;
   min-width: 0;
 }
-.object-properties input:not([type="range"]):not([type="color"]) {
+/* The shared slider brings its own compact number field; this panel-wide rule is
+   for the name and transform inputs, which are the ones that want full width. */
+.object-properties
+  :not(.control-label)
+  > input:not([type="range"]):not([type="color"]) {
   background: #171d19;
   border: 1px solid #38463c;
   padding: 7px;
@@ -2246,21 +2250,6 @@ input[type="color"] {
   background: none;
   border: 1px solid #485d4d;
   padding: 2px;
-}
-.object-slider {
-  display: block;
-  margin: 16px 0;
-}
-.object-slider > span {
-  display: flex;
-  justify-content: space-between;
-  font-size: 10px;
-  margin-bottom: 9px;
-  color: #a6b9ab;
-}
-.object-slider input {
-  width: 100%;
-  accent-color: var(--accent);
 }
 .object-transform {
   margin: 18px 0;

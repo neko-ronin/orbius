@@ -1,4 +1,5 @@
 import LayerControls from "./LayerControls.jsx";
+import Control from "../studio/Control.jsx";
 import { layerDefaults } from "./layers.js";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -6,6 +7,7 @@ import {
   MAX_OBJECTS,
   validateObjects,
   objectOptics,
+  objectControls,
 } from "./model.js";
 import {
   validateProject,
@@ -79,6 +81,7 @@ export default function ObjectEditor({
   notify,
   particleContainer,
   onSimulation,
+  tip,
 }) {
   const input = useRef(),
     simulationInput = useRef(),
@@ -323,50 +326,18 @@ export default function ObjectEditor({
       setMessage(e.message);
     }
   }
-  const range = (key, label, min, max, step) => (
-    <label
-      className="object-slider"
-      key={key}
-      title={
-        {
-          thickness:
-            "Scales measured front-to-back depth for refraction and absorption. Try 0.1 for thin glass; 0.5 for a heavy optical form.",
-          dispersion:
-            "Separates red and blue refraction slightly. Small values give spectral edges; large values deliberately exaggerate them.",
-          studioLight:
-            "Brightness of the reflected studio lights. Clear glass needs something bright to reflect.",
-          absorption:
-            "How strongly the tint filters transmitted light. Thick regions absorb more.",
-          defects:
-            "Surface irregularity: forming waviness, orange peel, and a scratch field, plus uneven wall thickness. Seeded from the object, so it stays put.",
-          inclusions:
-            "Seeds and bubbles suspended in the body. They sit at depth and slide against the surface as the camera moves.",
-          roughness:
-            "Softens studio reflections and blurs the transmitted interior. Keep low for crisp dots.",
-          billow:
-            "Vertical motion amplitude. Each dot is clamped to its original interior interval, including imported closed meshes. Rebuild older layers to enable motion.",
-          flow: "Speed of terrain motion, traveling light, and sparkle animation. Zero pauses the flow.",
-          gradient:
-            "Blends the lower and upper dot colors using height inside the original mesh.",
-          sparkles:
-            "Adds rare bright accents without increasing the brightness of every dot.",
-        }[key]
-      }
-    >
-      <span>
-        {label}
-        <output>{current[key]}</output>
-      </span>
-      <input
-        aria-label={label}
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={current[key]}
-        onChange={(e) => update(key, +e.target.value)}
-      />
-    </label>
+  // id names the field note; key names the value it writes, so a shell's density
+  // and a dot cloud's opacity can describe themselves differently while editing the
+  // same property.
+  const range = (id, key = id) => (
+    <Control
+      key={id}
+      id={id}
+      entry={objectControls[id]}
+      value={current[key]}
+      onChange={(next) => update(key, next)}
+      tip={tip}
+    />
   );
   return (
     <section className="object-editor">
@@ -518,7 +489,12 @@ export default function ObjectEditor({
             </>
           )}
           {current.role === "layers" && (
-            <LayerControls object={current} busy={busy} onBuild={buildLayers} />
+            <LayerControls
+              object={current}
+              busy={busy}
+              onBuild={buildLayers}
+              tip={tip}
+            />
           )}
           <p className="mesh-formats">
             {current.role === "layers"
@@ -557,21 +533,21 @@ export default function ObjectEditor({
                   </button>
                 ))}
               </div>
-              {range("opacity", "Glass density", 0, 1, 0.01)}
-              {range("ior", "Refraction", 1, 2.5, 0.01)}
-              {range("roughness", "Roughness", 0, 1, 0.01)}
-              {range("thickness", "Optical thickness", 0.01, 1, 0.01)}
-              {range("dispersion", "Spectral dispersion", 0, 0.2, 0.005)}
-              {range("absorption", "Tint absorption", 0, 3, 0.05)}
-              {range("studioLight", "Studio light", 0, 5, 0.05)}
-              {range("defects", "Surface defects", 0, 1, 0.01)}
-              {range("inclusions", "Bubbles & seeds", 0, 1, 0.01)}
+              {range("opacity")}
+              {range("ior")}
+              {range("roughness")}
+              {range("thickness")}
+              {range("dispersion")}
+              {range("absorption")}
+              {range("studioLight")}
+              {range("defects")}
+              {range("inclusions")}
             </>
           ) : (
             <>
-              {range("emission", "Dot brightness", 0, 5, 0.05)}
-              {range("pointSize", "Dot size", 0.5, 6, 0.1)}
-              {range("opacity", "Dot opacity", 0, 1, 0.01)}
+              {range("emission")}
+              {range("pointSize")}
+              {range("dotOpacity", "opacity")}
               <label className="object-color">
                 Upper color
                 <input
@@ -581,11 +557,10 @@ export default function ObjectEditor({
                   onChange={(e) => update("colorTop", e.target.value)}
                 />
               </label>
-              {range("gradient", "Height color blend", 0, 1, 0.01)}
-              {range("flow", "Flow speed", 0, 2, 0.01)}
-              {current.role === "layers" &&
-                range("billow", "Terrain billow", 0, 0.2, 0.005)}
-              {range("sparkles", "Sparkle accents", 0, 1, 0.01)}
+              {range("gradient")}
+              {range("flow")}
+              {current.role === "layers" && range("billow")}
+              {range("sparkles")}
             </>
           )}
           {["position", "rotation", "scale"].map((key) => (
