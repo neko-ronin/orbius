@@ -1235,6 +1235,7 @@ function App() {
                         "backdrop",
                         "stageFloor",
                         "stageRoughness",
+                        "stageTexture",
                         "bloom",
                         "exposure",
                         "grain",

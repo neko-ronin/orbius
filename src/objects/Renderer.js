@@ -51,6 +51,28 @@ float a=exp(-r*r*4.)*.6*uEmission*uOpacity*exp(-max(vDepth-3.,0.)*.12);
 vec3 color=mix(uTint,uColorTop,smoothstep(-.35,.5,vLocal.y)*uGradient);
 float peak=pow(.5+.5*sin(vLocal.x*7.+vLocal.z*5.),8.);
 frag=vec4((color*wave*(1.+peak*1.8)+vec3(spark))*a,a);}`;
+// Real glass is never the ideal solid. The surface keeps the waviness of how it
+// was formed and the scratches of having been handled, and the body keeps the
+// seeds the furnace left behind. Flawlessness is the loudest tell of a render.
+const flaws = `
+float hash3(vec3 p){return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453);}
+float vnoise(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+ vec4 a=vec4(hash3(i),hash3(i+vec3(1,0,0)),hash3(i+vec3(0,1,0)),hash3(i+vec3(1,1,0)));
+ vec4 b=vec4(hash3(i+vec3(0,0,1)),hash3(i+vec3(1,0,1)),hash3(i+vec3(0,1,1)),hash3(i+vec3(1,1,1)));
+ vec4 m=mix(a,b,f.z);
+ return mix(mix(m.x,m.y,f.x),mix(m.z,m.w,f.x),f.y);}
+// The slope of the noise, which is the direction the surface should tilt along.
+vec3 wobble(vec3 p,float f){float e=.07,c=vnoise(p*f);
+ return (vec3(vnoise(p*f+vec3(e,0,0)),vnoise(p*f+vec3(0,e,0)),vnoise(p*f+vec3(0,0,e)))-c)/e;}
+// One seed per cell, jittered, most of them too small to see. A bubble never
+// spans a cell, so the neighbouring cells never have to be checked.
+float seed(vec3 p,float size){vec3 i=floor(p),f=fract(p);
+ vec3 c=vec3(hash3(i),hash3(i+11.3),hash3(i+23.7))*.6+.2;
+ // Cube the draw: a real melt leaves a few big seeds and a great many specks,
+ // where a flat distribution reads as evenly sprinkled dots.
+ float h=hash3(i+37.1);float r=size*(.06+.94*h*h*h);
+ return 1.-smoothstep(r*.45,r,length(f-c));}
+`;
 // The studio rig, and the world it stands in. Both are evaluated from world-space
 // directions so the lights stay put when the camera orbits: highlights that sweep
 // across a shell as you move are most of what separates glass from a painted ball.
@@ -101,11 +123,34 @@ vec3 stage(vec3 eye,vec3 dir,float floorY,float rough,float lit){
   vec2 o=vec2(cos(a),sin(a))*sqrt((float(i)+.5)/8.)*.055;
   shade+=texture(uFootprint,foot+o).r;}
  shade=clamp(shade/8.,0.,1.);
+ vec3 n=vec3(0,1,0);float polish=uStageRoughness;vec3 tone=vec3(.30,.31,.335);
+ // Fine detail has to fall away with distance or the floor shimmers: one texel of
+ // a noise field covers many pixels near the camera and many fields cover one pixel
+ // far away, and only the near half of that is a texture rather than an artifact.
+ float near=1.-smoothstep(1.2,6.5,length(hit.xz-eye.xz));
+ if(uStageTexture>0.&&near>.003){
+  vec2 q=hit.xz;float amount=uStageTexture*near;
+  // No real floor is flat, and a mirror-flat one reflects a mirror-clean rig,
+  // which is most of what makes a studio render read as a render. Two scales of
+  // slope, tiny in absolute terms and enormous in what they do to a reflection.
+  vec2 slope=(vec2(vnoise(vec3(q*2.3,0.)),vnoise(vec3(q*2.3,11.3)))-.5)
+   +(vec2(vnoise(vec3(q*6.7,3.7)),vnoise(vec3(q*6.7,19.1)))-.5)*.5;
+  n=normalize(vec3(slope.x*amount*.5,1,slope.y*amount*.5));
+  // A scuff is not a dark mark, it is a patch that stopped being polished. Stretch
+  // the noise along one axis so the marks read as drag rather than blotches, and
+  // keep the threshold high: wear that covers everything is not wear, it is a
+  // different floor, and it flattens the light pools instead of interrupting them.
+  float scuff=vnoise(vec3(q.x*3.2+vnoise(vec3(q*1.4,5.))*2.4,q.y*11.,7.));
+  scuff=smoothstep(.62,.9,scuff);
+  polish=clamp(polish+scuff*amount*.55,0.,1.);
+  // Tooth: the fibre of seamless paper, or the aggregate in a poured floor.
+  float tooth=vnoise(vec3(q*13.,3.))*.6+vnoise(vec3(q*34.,9.))*.4;
+  tone*=1.+(tooth-.5)*amount*.5-scuff*amount*.14;}
  // Sheen: the rig reflected in the floor is what draws the light pools, and they
  // travel when a light moves because they are the same function.
- vec3 sheen=envLight(reflect(dir,vec3(0,1,0)),uStageRoughness);
+ vec3 sheen=envLight(reflect(dir,n),polish);
  vec3 ambient=envLight(vec3(0,1,0),1.)+envLight(normalize(vec3(dir.x,.6,dir.z)),.85);
- vec3 surface=(vec3(.30,.31,.335)*ambient*(1.-shade*.82)+sheen*mix(1.1,.12,uStageRoughness)*(1.-shade*.55))*lit;
+ vec3 surface=(tone*ambient*(1.-shade*.82)+sheen*mix(1.1,.12,polish)*(1.-shade*.55))*lit;
  // The seam where the floor meets the far wall: a real horizon for a shell to
  // bend, which a screen-space gradient can never give it.
  float far=smoothstep(3.5,9.,length(hit.xz-eye.xz));
@@ -113,7 +158,8 @@ vec3 stage(vec3 eye,vec3 dir,float floorY,float rough,float lit){
 }`;
 const backdropFragment = `#version 300 es
 precision highp float;in vec2 uv;out vec4 frag;
-uniform float uAspect,uZoom,uBackdrop,uTilt,uRotation,uStageFloor,uStageRoughness;
+uniform float uAspect,uZoom,uBackdrop,uTilt,uRotation,uStageFloor,uStageRoughness,uStageTexture;
+${flaws}
 ${world}
 void main(){vec2 ndc=uv*2.-1.;
  mat3 cam=viewMatrix(uTilt,uRotation),inv=transpose(cam);
@@ -125,7 +171,8 @@ void main(){vec2 ndc=uv*2.-1.;
 // and that is also what you actually see in a real sweep.
 const reflectionFragment = `#version 300 es
 precision highp float;in vec3 vNormal,vView,vLocal;in float vDepth;out vec4 frag;
-uniform vec3 uTint;uniform float uIor,uRoughness,uStudioLight,uTilt,uRotation,uStageFloor,uStageRoughness;
+uniform vec3 uTint;uniform float uIor,uRoughness,uStudioLight,uTilt,uRotation,uStageFloor,uStageRoughness,uStageTexture;
+${flaws}
 ${world}
 void main(){
  vec3 n=normalize(vNormal),view=normalize(-vView);
@@ -146,33 +193,11 @@ void main(){
 }`;
 const backDepth = `#version 300 es
 precision highp float;in float vDepth;out vec4 frag;void main(){frag=vec4(vDepth/16.,0,0,1);}`;
-// Real glass is never the ideal solid. The surface keeps the waviness of how it
-// was formed and the scratches of having been handled, and the body keeps the
-// seeds the furnace left behind. Flawlessness is the loudest tell of a render.
-const flaws = `
-float hash3(vec3 p){return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453);}
-float vnoise(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
- vec4 a=vec4(hash3(i),hash3(i+vec3(1,0,0)),hash3(i+vec3(0,1,0)),hash3(i+vec3(1,1,0)));
- vec4 b=vec4(hash3(i+vec3(0,0,1)),hash3(i+vec3(1,0,1)),hash3(i+vec3(0,1,1)),hash3(i+vec3(1,1,1)));
- vec4 m=mix(a,b,f.z);
- return mix(mix(m.x,m.y,f.x),mix(m.z,m.w,f.x),f.y);}
-// The slope of the noise, which is the direction the surface should tilt along.
-vec3 wobble(vec3 p,float f){float e=.07,c=vnoise(p*f);
- return (vec3(vnoise(p*f+vec3(e,0,0)),vnoise(p*f+vec3(0,e,0)),vnoise(p*f+vec3(0,0,e)))-c)/e;}
-// One seed per cell, jittered, most of them too small to see. A bubble never
-// spans a cell, so the neighbouring cells never have to be checked.
-float seed(vec3 p,float size){vec3 i=floor(p),f=fract(p);
- vec3 c=vec3(hash3(i),hash3(i+11.3),hash3(i+23.7))*.6+.2;
- // Cube the draw: a real melt leaves a few big seeds and a great many specks,
- // where a flat distribution reads as evenly sprinkled dots.
- float h=hash3(i+37.1);float r=size*(.06+.94*h*h*h);
- return 1.-smoothstep(r*.45,r,length(f-c));}
-`;
 const glass = `#version 300 es
 precision highp float;in vec3 vNormal,vView,vLocal;in float vDepth;out vec4 frag;
 uniform sampler2D uContents,uBackDepth;uniform vec2 uResolution;uniform vec3 uTint;
 uniform float uOpacity,uIor,uRoughness,uThickness,uDispersion,uStudioLight,uAbsorption,uZoom,uAspect,uSamples;
-uniform float uTilt,uRotation,uStageFloor,uStageRoughness,uDefects,uInclusions,uSeed;
+uniform float uTilt,uRotation,uStageFloor,uStageRoughness,uStageTexture,uDefects,uInclusions,uSeed;
 uniform vec3 uRotationObject,uScale;
 ${transforms}
 ${flaws}
@@ -484,6 +509,7 @@ export class ObjectRenderer {
         uBackdrop: config.backdrop,
         uStageFloor: config.stageFloor,
         uStageRoughness: config.stageRoughness,
+        uStageTexture: config.stageTexture,
         uStageExtent: STAGE_EXTENT,
       });
       e.uniform(this.backdrop, "uFootprint", 6, "int");
@@ -520,6 +546,7 @@ export class ObjectRenderer {
         uStudioLight: o.studioLight,
         uStageFloor: config.stageFloor,
         uStageRoughness: config.stageRoughness,
+        uStageTexture: config.stageTexture,
         uAbsorption: o.absorption,
         uSamples: e.show ? 12 : 4,
         uEmission: o.emission,

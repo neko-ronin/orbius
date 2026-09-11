@@ -160,6 +160,30 @@ The stage previews edits immediately. **Collect family** stores the construction
 
 Scope: volumetric orb materials. It is not an arbitrary shader graph, AI shader generation system, surface BRDF editor, or geometry editor. Noise-heavy combinations can be dense and expensive; the author should preserve negative space. Technical checks are not a substitute for the user's aesthetic acceptance.
 
+### Floor texture
+
+A mirror-flat floor reflects a mirror-clean rig, and the analytic stage was exactly
+flat. **Floor texture** gives it three things a real sweep has: two scales of slow
+undulation, which is what actually breaks a reflection up; drag marks where things
+have been moved, which raise local roughness rather than painting a dark smear,
+because a scuff is a patch that stopped being polished; and the tooth of the surface
+itself. The scuff threshold is deliberately high — wear that covers everything is
+not wear, it is a different floor, and the first tuning of this flattened the light
+pools instead of interrupting them.
+
+All of it fades out with distance. One cell of a noise field covers many pixels near
+the camera and many cells cover one pixel far away, and only the near half of that
+is texture rather than aliasing.
+
+Measured rather than assumed: the stage pass goes from 0.59ms to 0.67ms with texture
+at full, about 1.7% of the frame.
+
+Known limit: the floor's analytic sheen ripples with the undulation, but the
+mirrored mesh of the floor reflection does not — it is geometry, and it reflects
+through a flat plane. A shell's reflection stays crisp on a floor whose highlights
+have gone soft. Distorting it would mean displacing the mirrored vertices by the
+same field, which is a vertex-shader lookup of a fragment-shader function.
+
 ### Measuring it
 
 Frame rate is a fact about the tab, not about the renderer: a throttled or

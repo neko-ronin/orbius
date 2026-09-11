@@ -249,6 +249,7 @@ export const defaults = {
   containment: 1.2,
   stageFloor: -1.15,
   stageRoughness: 0.42,
+  stageTexture: 0.55,
   ...lightDefaults,
 };
 // The parameters a saved particle project carries into a glass enclosure. Trail,
@@ -299,6 +300,14 @@ export const controls = {
     0.01,
     "Polish of the floor. Low values give a wet, mirror-like sweep that throws the lights back up into the glass; high values give matte seamless paper.",
     "glossy studio floor reflection roughness",
+  ],
+  stageTexture: [
+    "Floor texture",
+    0,
+    1,
+    0.01,
+    "How worn the floor is: slow undulation, drag marks where things have been moved, and the tooth of the surface itself. A mirror-flat floor reflects a mirror-clean rig, which is most of what makes a studio render read as a render. Fades out with distance, since fine detail far away is aliasing rather than texture.",
+    "seamless paper cyclorama floor texture scuffs",
   ],
   backdrop: [
     "Studio backdrop",
