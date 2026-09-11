@@ -113,9 +113,34 @@ The parameters are flat keys (`keyAzimuth`, `fillKelvin`, …) rather than a nes
 array, so persistence, validation, range clamping, and the slider UI all come free
 from machinery that already existed.
 
-Not yet done from the realism list: the object's own reflection in the floor. The
-environment is procedural by necessity — the project ships no external assets — so a
-convincing studio is reachable and a photographic one is not.
+### The floor reflection
+
+A shell now leaves an image of itself in the floor. The mesh is drawn a second time
+with the model mirrored through the floor plane — one extra geometry pass with no
+render target, no mirrored camera, and no reflection texture to size. The mirror
+reverses the winding, so the pass culls front faces to keep the ones now facing the
+camera, and it draws after the floor but before anything standing on it, so the real
+object covers its own reflection where they meet.
+
+Only the bright half of a shell survives a reflection — the rig in its surface and
+its lit rim — so the pass shades with the light rig and Fresnel alone and traces no
+refraction. That is both far cheaper and closer to what a real sweep shows. It fades
+exponentially with distance below the floor, the way a reflection loses itself in the
+surface, and **Floor finish** scales it, because the polish of the floor is one
+physical quantity and does not deserve two sliders. Above 0.85 the pass is skipped
+entirely rather than drawn at a strength nobody can see.
+
+A mirrored mesh would paint itself across the sky wherever the floor is not visible,
+so a pixel whose world ray does not point downward is discarded. That is the exact
+test, not an approximation of one.
+
+Not reflected: the contents of a shell, and dot objects outside one. The shell is
+what reads as an object standing on a surface; reflecting a luminous point cloud
+would need the trail buffer mirrored too, which is a target's worth of memory for
+something the floor mostly swallows.
+
+The environment is procedural by necessity — the project ships no external assets —
+so a convincing studio is reachable and a photographic one is not.
 
 Lighting is one studio rig (`envLight`): a graded sky, a large soft key box, a wide cool strip and a narrow warm strip that read as vertical highlights on a curved shell, and a floor bounce. Roughness widens every one of them. A grazing sheen term adds the thin bright edge a shell shows against a dark studio. **Studio backdrop** (scene finish) draws a dark sweep behind the objects so refraction and reflection have a world to show; set it to zero for black-space, dendrite-style compositions. Four **optical finish** presets — Clear, Frosted, Prism, Smoked — set the nine optical controls together, defects and seeds included,, since no single slider produces a finish on its own.
 

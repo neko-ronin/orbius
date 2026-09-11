@@ -29,13 +29,18 @@ void main(){vec3 w=modelMatrix(uRotationObject)*(position*uScale)+uPosition;
 const vertex = `#version 300 es
 precision highp float;layout(location=0)in vec3 position;layout(location=1)in vec3 normal;
 uniform float uBillow,uFlow,uTime,uIsLayers;
-uniform vec3 uPosition,uRotationObject,uScale;uniform float uTilt,uRotation,uZoom,uAspect,uPointSize,uPixelRatio;
+uniform vec3 uPosition,uRotationObject,uScale;uniform float uTilt,uRotation,uZoom,uAspect,uPointSize,uPixelRatio,uMirror,uStageFloor;
 out vec3 vNormal,vView,vLocal;out float vDepth;
 ${transforms}
 void main(){vec3 local=position;
 if(uIsLayers>.5) local.y=clamp(local.y+sin(local.x*4.+local.z*3.+uTime*uFlow*2.)*uBillow,normal.x,normal.y);
-mat3 model=modelMatrix(uRotationObject);mat3 camera=rx(uTilt)*ry(uRotation);vec3 p=camera*(model*(local*uScale)+uPosition);float d=4.-p.z;
-vLocal=local;vView=vec3(p.xy,-d);vNormal=camera*model*(normal/uScale);vDepth=d;gl_Position=vec4(p.x*2.5*uZoom/uAspect,p.y*2.5*uZoom,(20.1/19.9)*d-(4./19.9),d);gl_PointSize=clamp(uPointSize*uPixelRatio*3.5/max(d,.1),1.,32.);}`;
+mat3 model=modelMatrix(uRotationObject);mat3 camera=rx(uTilt)*ry(uRotation);
+vec3 w=model*(local*uScale)+uPosition,nm=model*(normal/uScale);
+// The reflection pass draws the same mesh mirrored through the floor plane, which
+// is the object as the floor sees it. Nothing else about the draw changes.
+if(uMirror>.5){w.y=2.*uStageFloor-w.y;nm.y=-nm.y;}
+vec3 p=camera*w;float d=4.-p.z;
+vLocal=local;vView=vec3(p.xy,-d);vNormal=camera*nm;vDepth=d;gl_Position=vec4(p.x*2.5*uZoom/uAspect,p.y*2.5*uZoom,(20.1/19.9)*d-(4./19.9),d);gl_PointSize=clamp(uPointSize*uPixelRatio*3.5/max(d,.1),1.,32.);}`;
 const dots = `#version 300 es
 precision highp float;in float vDepth;in vec3 vLocal;out vec4 frag;uniform vec3 uTint,uColorTop;uniform float uEmission,uOpacity,uGradient,uFlow,uSparkles,uTime;
 void main(){float r=length(gl_PointCoord-.5)*2.;if(r>1.)discard;
@@ -115,6 +120,30 @@ void main(){vec2 ndc=uv*2.-1.;
  vec3 eye=inv*vec3(0,0,4.);
  vec3 dir=inv*normalize(vec3(ndc.x*uAspect/(2.5*uZoom),ndc.y/(2.5*uZoom),-1.));
  frag=vec4(stage(eye,dir,uStageFloor,.3,uBackdrop),1.);}`;
+// What a shell leaves in the floor. Only its bright half survives a reflection —
+// the rig in its surface and its lit rim — so there is no refraction to trace here,
+// and that is also what you actually see in a real sweep.
+const reflectionFragment = `#version 300 es
+precision highp float;in vec3 vNormal,vView,vLocal;in float vDepth;out vec4 frag;
+uniform vec3 uTint;uniform float uIor,uRoughness,uStudioLight,uTilt,uRotation,uStageFloor,uStageRoughness;
+${world}
+void main(){
+ vec3 n=normalize(vNormal),view=normalize(-vView);
+ float nv=max(.001,dot(n,view));
+ mat3 inv=transpose(viewMatrix(uTilt,uRotation));
+ vec3 posW=inv*(vView+vec3(0,0,4.)),eye=inv*vec3(0,0,4.);
+ // A reflection only exists where the floor does. Looking level or up, the mirrored
+ // mesh would otherwise paint itself across the sky.
+ if(normalize(posW-eye).y>-1e-4) discard;
+ float f0=pow((uIor-1.)/(uIor+1.),2.);
+ float f=f0+(1.-f0)*pow(1.-nv,5.);
+ vec3 lit=envLight(inv*reflect(-view,n),uRoughness)*uStudioLight*f;
+ lit+=mix(vec3(.6,.72,1.),uTint,.35)*pow(1.-nv,6.)*uStudioLight*.35;
+ // Fade with distance below the floor, the way a real reflection loses itself in
+ // the surface, and let a matte sweep swallow it entirely.
+ float drop=max(0.,uStageFloor-posW.y);
+ frag=vec4(lit*mix(1.15,0.,smoothstep(.08,.85,uStageRoughness))*exp(-drop*1.7),1.);
+}`;
 const backDepth = `#version 300 es
 precision highp float;in float vDepth;out vec4 frag;void main(){frag=vec4(vDepth/16.,0,0,1);}`;
 // Real glass is never the ideal solid. The surface keeps the waviness of how it
@@ -205,6 +234,7 @@ export class ObjectRenderer {
     this.glass = engine.program(vertex, glass);
     this.dots = engine.program(vertex, dots);
     this.backDepth = engine.program(vertex, backDepth);
+    this.reflection = engine.program(vertex, reflectionFragment);
     this.backdrop = engine.program(quadVertex, backdropFragment);
     this.footprint = engine.program(footprintVertex, footprintFragment);
     this.resources = new Map();
@@ -461,7 +491,7 @@ export class ObjectRenderer {
     }
     g.enable(g.BLEND);
     g.blendFunc(g.ONE, g.ONE);
-    const draw = (o, program, points) => {
+    const draw = (o, program, points, mirror) => {
       o = { ...objectOptics, ...o };
       const r = this.resources.get(o.id);
       e.set(program, {
@@ -495,6 +525,7 @@ export class ObjectRenderer {
         uIor: o.ior,
         uRoughness: o.roughness,
         uPointSize: o.pointSize,
+        uMirror: mirror ? 1 : 0,
         uPixelRatio: w / e.canvas.getBoundingClientRect().width,
         uResolution: [w, h],
       });
@@ -511,6 +542,18 @@ export class ObjectRenderer {
         points ? r.pointCount : r.meshCount,
       );
     };
+    // What the shells leave in the floor, before anything that stands on it. The
+    // mirror reverses the winding, so cull the near faces to keep the far ones,
+    // which are the ones now facing the camera.
+    if (config.stageRoughness < 0.85) {
+      g.enable(g.CULL_FACE);
+      g.cullFace(g.FRONT);
+      for (const o of objects)
+        if (o.visible && o.role === "glass")
+          draw(o, this.reflection, false, true);
+      g.cullFace(g.BACK);
+      g.disable(g.CULL_FACE);
+    }
     objects
       .filter((o) => o.visible && o.role !== "glass")
       .forEach((o) => draw(o, this.dots, true));
