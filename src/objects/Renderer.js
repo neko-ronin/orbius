@@ -1,4 +1,5 @@
 import { objectOptics } from "./model.js";
+import { lightRig } from "../project.js";
 import { smoothNormals } from "./geometry.js";
 import { quadVertex } from "../shaders.js";
 // Defects are keyed to the object's identity, so a given vessel keeps the same
@@ -50,31 +51,46 @@ frag=vec4((color*wave*(1.+peak*1.8)+vec3(spark))*a,a);}`;
 // across a shell as you move are most of what separates glass from a painted ball.
 const world = `
 uniform sampler2D uFootprint;uniform float uStageExtent;
+uniform vec4 uLightDir[3],uLightColor[3];
 mat3 viewMatrix(float tilt,float rotation){
  float c=cos(rotation),s=sin(rotation),ct=cos(tilt),st=sin(tilt);
  return mat3(1,0,0,0,ct,st,0,-st,ct)*mat3(c,0,-s,0,1,0,s,0,c);}
 vec3 envLight(vec3 d,float rough){
- // atan(0,0) is undefined and a straight-up or straight-down direction is a
- // perfectly ordinary lookup here, so keep the azimuth defined everywhere.
- float sharp=1.-rough;float az=atan(d.x,abs(d.z)<1e-5&&abs(d.x)<1e-5?1.:d.z);
- vec3 sky=mix(vec3(.010,.014,.024),vec3(.048,.060,.082),smoothstep(-.9,.9,d.y));
- float key=pow(max(0.,dot(d,normalize(vec3(-.45,.5,.74)))),mix(2.5,26.,sharp));
- float band=smoothstep(-.95,-.35,d.y)*smoothstep(1.05,.35,d.y);
- float strip=exp(-pow((az-1.15)*mix(2.5,9.,sharp),2.))*band;
- float edge=exp(-pow((az+2.05)*mix(3.,15.,sharp),2.))*band;
- float bounce=smoothstep(.15,-.85,d.y);
- return sky+vec3(1.,.97,.93)*key*1.9+vec3(.72,.86,1.)*strip*2.6+vec3(1.,.74,.48)*edge*2.1+vec3(.55,.34,.26)*bounce*.5;
+ vec3 sum=mix(vec3(.010,.014,.024),vec3(.048,.060,.082),smoothstep(-.9,.9,d.y))
+  +vec3(.55,.34,.26)*smoothstep(.15,-.85,d.y)*.5;
+ for(int i=0;i<3;i++){
+  vec3 L=uLightDir[i].xyz;
+  // A softbox is a rectangle, not a point. Build a basis on the light axis and
+  // measure the two tangential offsets separately, so one expression gives both a
+  // round octa and a tall strip. No azimuth to wrap and it holds at the poles.
+  vec3 up=abs(L.y)>.95?vec3(1,0,0):vec3(0,1,0);
+  vec3 t=normalize(cross(up,L)),b=cross(L,t);
+  // The softbox height rides in the colour's fourth channel rather than costing a
+  // third uniform array.
+  vec2 box=vec2(uLightDir[i].w,uLightColor[i].a),wide=box+rough*.55;
+  float x=dot(d,t)/wide.x,y=dot(d,b)/wide.y;
+  // Roughness spreads the lobe, so give some of the energy back: a blurred
+  // reflection of a light is wider and dimmer, never wider and brighter. The
+  // square root rather than the full ratio because the broad lookups here double as
+  // the ambient term, and conserving exactly leaves the room with no fill at all.
+  float spread=sqrt(box.x*box.y/(wide.x*wide.y));
+  sum+=uLightColor[i].rgb*exp(-(x*x+y*y))*spread*smoothstep(-.25,.15,dot(d,L));}
+ return sum;
 }
 // The stage floor, as an analytic plane rather than geometry: it is infinite, it
 // needs no depth, and refraction through a shell bends a real horizon instead of
 // a flat gradient.
+// rough is how sharply the caller sees the room, not the floor's own finish: a
+// polished shell must see crisp softboxes where a frosted one sees a glow, and
+// the floor reads its own polish from uStageRoughness either way.
 vec3 stage(vec3 eye,vec3 dir,float floorY,float rough,float lit){
  float t=(floorY-eye.y)/dir.y;
- if(dir.y>-1e-4||t<=0.) return envLight(dir,.92)*lit;
+ if(dir.y>-1e-4||t<=0.) return envLight(dir,rough)*lit;
  vec3 hit=eye+dir*t;
- // Offset along the key light so the shadow falls away from it, and sample wide
- // enough that the edge is a penumbra rather than a cutout.
- vec2 foot=(hit.xz+vec2(.32,-.20)*.55)/uStageExtent*.5+.5;
+ // Shift the lookup toward the key light so the shadow falls away from it, and
+ // sample wide enough that the edge is a penumbra rather than a cutout. Derived
+ // from the key rather than fixed, so moving the light moves its shadow.
+ vec2 foot=(hit.xz+uLightDir[0].xz/max(uLightDir[0].y,.25)*.3)/uStageExtent*.5+.5;
  float shade=0.;
  for(int i=0;i<8;i++){float a=float(i)*2.399963;
   vec2 o=vec2(cos(a),sin(a))*sqrt((float(i)+.5)/8.)*.055;
@@ -82,13 +98,13 @@ vec3 stage(vec3 eye,vec3 dir,float floorY,float rough,float lit){
  shade=clamp(shade/8.,0.,1.);
  // Sheen: the rig reflected in the floor is what draws the light pools, and they
  // travel when a light moves because they are the same function.
- vec3 sheen=envLight(reflect(dir,vec3(0,1,0)),rough);
+ vec3 sheen=envLight(reflect(dir,vec3(0,1,0)),uStageRoughness);
  vec3 ambient=envLight(vec3(0,1,0),1.)+envLight(normalize(vec3(dir.x,.6,dir.z)),.85);
- vec3 surface=(vec3(.30,.31,.335)*ambient*(1.-shade*.82)+sheen*mix(1.1,.12,rough)*(1.-shade*.55))*lit;
+ vec3 surface=(vec3(.30,.31,.335)*ambient*(1.-shade*.82)+sheen*mix(1.1,.12,uStageRoughness)*(1.-shade*.55))*lit;
  // The seam where the floor meets the far wall: a real horizon for a shell to
  // bend, which a screen-space gradient can never give it.
  float far=smoothstep(3.5,9.,length(hit.xz-eye.xz));
- return mix(surface,envLight(dir,.92)*lit,far);
+ return mix(surface,envLight(dir,rough)*lit,far);
 }`;
 const backdropFragment = `#version 300 es
 precision highp float;in vec2 uv;out vec4 frag;
@@ -98,7 +114,7 @@ void main(){vec2 ndc=uv*2.-1.;
  mat3 cam=viewMatrix(uTilt,uRotation),inv=transpose(cam);
  vec3 eye=inv*vec3(0,0,4.);
  vec3 dir=inv*normalize(vec3(ndc.x*uAspect/(2.5*uZoom),ndc.y/(2.5*uZoom),-1.));
- frag=vec4(stage(eye,dir,uStageFloor,uStageRoughness,uBackdrop),1.);}`;
+ frag=vec4(stage(eye,dir,uStageFloor,.3,uBackdrop),1.);}`;
 const backDepth = `#version 300 es
 precision highp float;in float vDepth;out vec4 frag;void main(){frag=vec4(vDepth/16.,0,0,1);}`;
 // Real glass is never the ideal solid. The surface keeps the waviness of how it
@@ -178,7 +194,7 @@ void main(){vec3 n=normalize(vNormal),view=normalize(-vView);
  // backdrop control dims what the camera sees directly, never what the glass sees.
  mat3 inv=transpose(viewMatrix(uTilt,uRotation));
  vec3 posW=inv*(vView+vec3(0,0,4.));
- vec3 reflection=stage(posW,inv*reflect(-view,n),uStageFloor,uStageRoughness,1.)*uStudioLight;
+ vec3 reflection=stage(posW,inv*reflect(-view,n),uStageFloor,uRoughness,1.)*uStudioLight;
  // Grazing sheen: the thin bright edge a real shell shows against a dark studio.
  reflection+=mix(vec3(.6,.72,1.),uTint,.35)*pow(1.-nv,6.)*uStudioLight*.4;
  frag=vec4(contents*absorption*(1.-f)+reflection*f,1.);
@@ -389,6 +405,13 @@ export class ObjectRenderer {
   render(objects, config, shared, w, h, target, drawContents) {
     const e = this.engine,
       g = e.gl;
+    // The rig is resolved once per frame on the CPU: kelvin, drift and flicker are
+    // per-light, never per-pixel, and the shader only ever needs the result.
+    const rig = lightRig(config, shared.uTime);
+    const bindRig = (program) => {
+      e.uniform(program, "uLightDir[0]", rig.direction, "v4");
+      e.uniform(program, "uLightColor[0]", rig.color, "v4");
+    };
     this.sync(objects);
     this.resize(w, h);
     g.viewport(0, 0, w, h);
@@ -432,6 +455,7 @@ export class ObjectRenderer {
         uStageExtent: STAGE_EXTENT,
       });
       e.uniform(this.backdrop, "uFootprint", 6, "int");
+      bindRig(this.backdrop);
       g.bindVertexArray(e.emptyVAO);
       g.drawArrays(g.TRIANGLES, 0, 3);
     }
@@ -478,6 +502,7 @@ export class ObjectRenderer {
         e.uniform(program, "uContents", 3, "int");
         e.uniform(program, "uBackDepth", 4, "int");
         e.uniform(program, "uFootprint", 6, "int");
+        bindRig(program);
       }
       g.bindVertexArray(r.vaos[points ? 1 : 0]);
       g.drawArrays(

@@ -23,6 +23,8 @@ import {
   resolveGraph,
   validateProject,
   download,
+  lightRoles,
+  lightKeys,
 } from "./project.js";
 import "./style.css";
 const tools = [
@@ -1237,6 +1239,10 @@ function App() {
                         "vignette",
                       ],
                     ],
+                    ...lightRoles.map(([id, label]) => [
+                      `${label} light`,
+                      lightKeys[id],
+                    ]),
                     ...(particleContainer
                       ? [
                           [

@@ -79,11 +79,43 @@ Both fields are keyed to a hash of the object's id, so a given vessel keeps its 
 bubbles and scratches across sessions without storing a field of them, and duplicating
 an object gives the copy its own flaws.
 
-Not yet done from the realism list: a data-driven light rig with per-light placement,
-size, Kelvin and intensity, the object's own reflection in the floor, and temporal
-drift in the lighting. The environment is procedural by necessity — the project ships
-no external assets — so a convincing studio is reachable and a photographic one is
-not.
+### The rig
+
+Lighting was three hardcoded lobes, which meant the only honest answer to "move the
+key" was to edit a shader. It is data now: three softboxes — key, fill, back — each
+with azimuth and elevation on a sphere around the object, a width and a height, a
+colour temperature in kelvin, an intensity, and how much it drifts and flickers.
+
+A softbox is a rectangle, not a point, so `envLight` builds a basis on each light's
+axis and measures the two tangential offsets separately. One expression then gives a
+round octa, a tall strip box, and everything between, with no azimuth to wrap and no
+trouble at the poles. Roughness widens the lobe and the energy is given partly back,
+because a blurred reflection of a light is wider and dimmer, never wider and
+brighter. It is the square root of the ratio rather than the ratio itself: the broad
+lookups double as the ambient term, and conserving exactly leaves the room with no
+fill at all.
+
+`stage()`'s roughness argument now means *how sharply the caller sees the room*, not
+the floor's own finish, which it reads from its own uniform. A polished shell sees
+crisp softboxes where a frosted one sees a glow — previously everything saw the room
+through the same fixed blur, which is most of why the rig read as painted on. The
+contact shadow's offset derives from the key light, so moving the key moves its
+shadow. Below about 15° of elevation the offset is clamped rather than swinging to
+infinity, so a very low or underslung key leaves its shadow where it is.
+
+Kelvin, drift and flicker resolve on the CPU once per frame — per light, never per
+pixel — and the shader receives only a direction, a softbox size and a premultiplied
+colour. Drift and flicker are built from three periods with no common multiple, so
+the rig wanders without ever settling into a visible loop; zero on both pins a light
+exactly, since a still composition has to be able to hold still.
+
+The parameters are flat keys (`keyAzimuth`, `fillKelvin`, …) rather than a nested
+array, so persistence, validation, range clamping, and the slider UI all come free
+from machinery that already existed.
+
+Not yet done from the realism list: the object's own reflection in the floor. The
+environment is procedural by necessity — the project ships no external assets — so a
+convincing studio is reachable and a photographic one is not.
 
 Lighting is one studio rig (`envLight`): a graded sky, a large soft key box, a wide cool strip and a narrow warm strip that read as vertical highlights on a curved shell, and a floor bounce. Roughness widens every one of them. A grazing sheen term adds the thin bright edge a shell shows against a dark studio. **Studio backdrop** (scene finish) draws a dark sweep behind the objects so refraction and reflection have a world to show; set it to zero for black-space, dendrite-style compositions. Four **optical finish** presets — Clear, Frosted, Prism, Smoked — set the nine optical controls together, defects and seeds included,, since no single slider produces a finish on its own.
 

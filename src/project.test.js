@@ -8,6 +8,8 @@ import {
   resolveGraph,
   conformSimulation,
   controls,
+  lightRig,
+  lightRoles,
 } from "./project.js";
 import { newObject } from "./objects/model.js";
 const fixture = () => ({
@@ -283,4 +285,49 @@ test("conforming without a measured interior fails at the boundary", () => {
       () => conformSimulation(defaults, interior, [1, 1, 1]),
       /not measured/,
     );
+});
+
+test("the studio rig resolves placement, colour temperature and drift", () => {
+  const rig = (over, time = 0) => lightRig({ ...defaults, ...over }, time);
+  const dir = (r, i) => [...r.direction.slice(i * 4, i * 4 + 3)];
+  const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-5, `${a} vs ${b}`);
+
+  // Spherical placement: zero azimuth faces away from the camera down +Z, and
+  // elevation lifts toward +Y.
+  const facing = rig({ keyAzimuth: 0, keyElevation: 0, keyDrift: 0 });
+  dir(facing, 0).forEach((v, axis) => near(v, [0, 0, 1][axis]));
+  const side = rig({ keyAzimuth: 90, keyElevation: 0, keyDrift: 0 });
+  dir(side, 0).forEach((v, axis) => near(v, [1, 0, 0][axis]));
+  const overhead = rig({ keyAzimuth: 40, keyElevation: 90, keyDrift: 0 });
+  dir(overhead, 0).forEach((v, axis) => near(v, [0, 1, 0][axis]));
+  for (let i = 0; i < lightRoles.length; i++)
+    near(Math.hypot(...dir(facing, i)), 1);
+
+  // Warm light is redder than cool light, and the softbox height travels in the
+  // colour's fourth channel.
+  const warm = rig({ keyKelvin: 2200, keyIntensity: 1, keyFlicker: 0 });
+  const cool = rig({ keyKelvin: 11000, keyIntensity: 1, keyFlicker: 0 });
+  assert.ok(warm.color[0] / warm.color[2] > cool.color[0] / cool.color[2]);
+  near(warm.color[3], defaults.keyHeight);
+  assert.deepEqual([...rig({ keyIntensity: 0 }).color.slice(0, 3)], [0, 0, 0]);
+
+  // A light with no drift or flicker must be pinned, or a still composition would
+  // never hold still; with them, it has to actually move.
+  const still = Object.fromEntries(
+    lightRoles.flatMap(([id]) => [
+      [`${id}Drift`, 0],
+      [`${id}Flicker`, 0],
+    ]),
+  );
+  assert.deepEqual([...rig(still, 0).direction], [...rig(still, 37).direction]);
+  assert.deepEqual([...rig(still, 0).color], [...rig(still, 37).color]);
+  const moving = { keyDrift: 1, keyFlicker: 1 };
+  assert.notDeepEqual(
+    [...rig(moving, 0).direction],
+    [...rig(moving, 37).direction],
+  );
+  assert.notDeepEqual([...rig(moving, 0).color], [...rig(moving, 37).color]);
+  // Flicker must not drive a light negative, however deep the trough.
+  for (let t = 0; t < 60; t += 0.37)
+    assert.ok(rig({ keyFlicker: 1, keyIntensity: 1 }, t).color[0] >= 0);
 });

@@ -8,6 +8,199 @@ export const palettes = [
   { name: "Acid dream", colors: ["#4861ff", "#bcff65", "#f1ffc7"] },
   { name: "Rose gold", colors: ["#b51b7c", "#f590ac", "#ffead0"] },
 ];
+// A studio rig as data rather than three hardcoded lobes. Each light is a softbox
+// on a sphere around the object: where it stands, how big the box is, what colour
+// it burns at, and how much it wanders and breathes. Flat keys (keyAzimuth, ...)
+// rather than a nested array, so persistence, validation, range clamping, and the
+// slider UI all come for free from the machinery that already exists.
+export const lightRoles = [
+  [
+    "key",
+    "Key",
+    {
+      azimuth: -31,
+      elevation: 30,
+      width: 0.45,
+      height: 0.45,
+      kelvin: 5400,
+      intensity: 1.9,
+      drift: 0.12,
+      flicker: 0.06,
+    },
+  ],
+  [
+    "fill",
+    "Fill",
+    {
+      azimuth: 66,
+      elevation: 2,
+      width: 0.13,
+      height: 0.75,
+      kelvin: 9000,
+      intensity: 2.6,
+      drift: 0.08,
+      flicker: 0.04,
+    },
+  ],
+  [
+    "back",
+    "Back",
+    {
+      azimuth: -117,
+      elevation: 4,
+      width: 0.09,
+      height: 0.7,
+      kelvin: 3000,
+      intensity: 2.1,
+      drift: 0.18,
+      flicker: 0.22,
+    },
+  ],
+];
+const lightProperties = [
+  [
+    "azimuth",
+    "azimuth",
+    -180,
+    180,
+    1,
+    "Where the light stands around the object, in degrees. Zero is behind the camera; 180 is directly behind the subject.",
+    "studio light placement photography",
+  ],
+  [
+    "elevation",
+    "elevation",
+    -30,
+    85,
+    1,
+    "How high the light is hung, in degrees. Around 30 is a portrait key; negative puts it below the subject for an uplight.",
+    "studio light height photography",
+  ],
+  [
+    "width",
+    "width",
+    0.04,
+    1,
+    0.01,
+    "Horizontal size of the softbox. Narrow gives the vertical bar highlight a strip box leaves on a curved shell; wide gives a broad soft wrap.",
+    "softbox strip box size",
+  ],
+  [
+    "height",
+    "height",
+    0.04,
+    1,
+    0.01,
+    "Vertical size of the softbox. Width and height together are the difference between an octa, a strip, and a bare bulb.",
+    "softbox size aspect",
+  ],
+  [
+    "kelvin",
+    "colour",
+    1800,
+    12000,
+    50,
+    "Colour temperature in kelvin. 2700 is a warm domestic bulb, 5600 is daylight, 9000 is open shade. Mixing temperatures across the rig is most of what makes studio light read as real.",
+    "kelvin colour temperature white balance",
+  ],
+  [
+    "intensity",
+    "intensity",
+    0,
+    6,
+    0.05,
+    "Brightness of this light. Zero turns it off without losing its placement.",
+    "studio light intensity",
+  ],
+  [
+    "drift",
+    "drift",
+    0,
+    1,
+    0.01,
+    "How far the light wanders from where it was hung. The motion is built from periods that share no common multiple, so it never settles into a visible loop.",
+    "light animation drift motion",
+  ],
+  [
+    "flicker",
+    "flicker",
+    0,
+    1,
+    0.01,
+    "How much the light breathes in brightness. Arrhythmic, like a practical lamp on a soft dimmer rather than a pulse.",
+    "light animation flicker pulse",
+  ],
+];
+const capitalise = (s) => s[0].toUpperCase() + s.slice(1);
+export const lightKeys = Object.fromEntries(
+  lightRoles.map(([id]) => [
+    id,
+    lightProperties.map(([p]) => id + capitalise(p)),
+  ]),
+);
+const lightDefaults = Object.fromEntries(
+  lightRoles.flatMap(([id, , values]) =>
+    lightProperties.map(([p]) => [id + capitalise(p), values[p]]),
+  ),
+);
+const lightControls = Object.fromEntries(
+  lightRoles.flatMap(([id, label]) =>
+    lightProperties.map(([p, name, min, max, step, help, terms]) => [
+      id + capitalise(p),
+      [`${label} ${name}`, min, max, step, help, terms],
+    ]),
+  ),
+);
+// The Planckian locus, as the cheap piecewise fit. Good between 1800K and 12000K,
+// which is the whole range a rig is ever hung at.
+function kelvinColor(k) {
+  const t = k / 100;
+  const channels = [
+    t <= 66 ? 255 : 329.7 * Math.pow(t - 60, -0.1332),
+    t <= 66 ? 99.47 * Math.log(t) - 161.1 : 288.1 * Math.pow(t - 60, -0.0755),
+    t >= 66 ? 255 : t <= 19 ? 0 : 138.5 * Math.log(t - 10) - 305,
+  ];
+  return channels.map((c) => Math.min(1, Math.max(0, c / 255)));
+}
+// Three periods with no common multiple. A single sine reads as a machine; this
+// wanders, which is what a room full of practicals and a draught actually does.
+const wander = (seed, t) =>
+  Math.sin(t * 0.31 + seed) * 0.6 +
+  Math.sin(t * 0.73 + seed * 2.1) * 0.3 +
+  Math.sin(t * 1.37 + seed * 3.7) * 0.1;
+// Resolve the rig to what the shader needs: a world direction and softbox width per
+// light, and a premultiplied colour with the height packed alongside it.
+export function lightRig(config, time) {
+  const direction = new Float32Array(12),
+    color = new Float32Array(12);
+  lightRoles.forEach(([id], i) => {
+    const at = (p) => config[id + capitalise(p)] ?? 0;
+    const drift = at("drift");
+    const azimuth =
+      ((at("azimuth") + drift * 16 * wander(i * 1.7, time)) * Math.PI) / 180;
+    const elevation =
+      ((at("elevation") + drift * 9 * wander(i * 1.7 + 5, time)) * Math.PI) /
+      180;
+    const flat = Math.cos(elevation);
+    direction.set(
+      [
+        Math.sin(azimuth) * flat,
+        Math.sin(elevation),
+        Math.cos(azimuth) * flat,
+        Math.max(0.04, at("width")),
+      ],
+      i * 4,
+    );
+    const level =
+      at("intensity") *
+      Math.max(0, 1 + at("flicker") * 0.4 * wander(i * 1.7 + 11, time * 1.9));
+    color.set(
+      [...kelvinColor(at("kelvin")).map((c) => c * level), at("height")],
+      i * 4,
+    );
+  });
+  return { direction, color };
+}
 export const defaults = {
   ...materialDefaults,
   ...speciesDefaults,
@@ -56,6 +249,7 @@ export const defaults = {
   containment: 1.2,
   stageFloor: -1.15,
   stageRoughness: 0.42,
+  ...lightDefaults,
 };
 // The parameters a saved particle project carries into a glass enclosure. Trail,
 // camera, and scene finish stay with the enclosure's own composition.
@@ -81,6 +275,7 @@ export const simulationKeys = [
 export const controls = {
   ...materialControls,
   ...speciesControls,
+  ...lightControls,
   containment: [
     "Containment force",
     0.2,
