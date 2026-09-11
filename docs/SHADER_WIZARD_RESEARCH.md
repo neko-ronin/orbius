@@ -236,10 +236,14 @@ to add. The signature-derived node is the version that does not have this proble
 user hand-edited, the code becomes a dead end and the graph becomes the only real
 interface. Either the graph owns a region and says so, or it round-trips.
 
-**A dependency.** No CodeMirror, no Monaco. This is a real constraint on every
-code-forward item above: line-marked errors, scrubbable literals, and syntax
-highlighting all have to be built on a `textarea` and an overlay, or deliberately
-skipped. Worth deciding before committing to D or F, not during.
+**A dependency.** Line-marked errors, scrubbable literals, and syntax highlighting
+have to be built on a `textarea` and an overlay. This was an assumption when first
+written and is now a measured finding — see
+[CODE_EDITOR_DEPENDENCY_RESEARCH.md](CODE_EDITOR_DEPENDENCY_RESEARCH.md). The short
+version: CodeMirror 6 would more than double the application's gzipped payload,
+Monaco ships open sanitizer advisories with a downgrade-only fix and does not
+support mobile, and **no library on the list offers scrubbable literals at all**, so
+custom editor code gets written either way.
 
 ## 7. Security note
 
