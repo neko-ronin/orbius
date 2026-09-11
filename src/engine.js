@@ -416,6 +416,14 @@ export class Engine {
     };
     // Particles project through the enclosure's camera while they are inside it,
     // so a point and a mesh vertex at the same place land on the same pixel.
+    // Pass labels belong to a workspace. Resetting on clear() missed the paths that
+    // change mode without clearing — loading a project, restoring an autosave — and
+    // left the particle solver's timing sitting in the orb breakdown.
+    if (this.timedMode !== this.mode) {
+      this.timer.reset();
+      this.gpu = null;
+      this.timedMode = this.mode;
+    }
     // One rig per frame, bound to whichever program draws. Glass resolves its own
     // inside ObjectRenderer; orb and material take it here.
     const rig = lightRig(c, this.time);

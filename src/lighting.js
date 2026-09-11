@@ -32,4 +32,13 @@ vec3 envLight(vec3 d,float rough){
   sum+=uLightColor[i].rgb*exp(-(x*x+y*y))*spread*smoothstep(-.25,.15,dot(d,L));}
  return sum;
 }
+// A mirror reflecting only lights and a smooth sky reads as a blob. The horizon is
+// the one line the eye needs to believe a reflection is a reflection — glass gets it
+// from stage(); a subject with no floor under it gets this instead.
+vec3 envRoom(vec3 d,float rough){
+ vec3 c=envLight(d,rough);
+ float below=smoothstep(.035,-.045,d.y);
+ float glance=smoothstep(.25,0.,abs(d.y));
+ return mix(c,c*.42+vec3(.05,.055,.07),below)+vec3(.16,.17,.2)*glance*(1.-rough)*.5;
+}
 `;

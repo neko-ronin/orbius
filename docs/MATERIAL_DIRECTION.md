@@ -184,6 +184,50 @@ through a flat plane. A shell's reflection stays crisp on a floor whose highligh
 have gone soft. Distorting it would mean displacing the mirrored vertices by the
 same field, which is a vertex-shader lookup of a fragment-shader function.
 
+### The two families under review
+
+`materialPresets` carried its own verdict on Solar cartography and Liquid mercury:
+*very unimpressive, on the chopping block*. Rebuilding them before the authoring
+work, rather than after, keeps two disappointing shapes from defining the contract
+authored families would have to fit.
+
+**One rig, everywhere.** Three environment functions existed — the real one written
+for the glass stage, a hardcoded strip and blob in the material shader, a sine band
+in the orb scaffold. The two workspaces that most depend on what they reflect had the
+worst of them. `envLight` now lives in `src/lighting.js` and all three share it;
+`stage()` stays with glass because it needs the footprint texture. The orb takes its
+key light direction from `uLightDir[0]`, so moving a light moves that orb's shading
+and its shadow, and the orb workspace gets the Key/Fill/Back sections for free.
+
+`envRoom()` adds the one thing a rig alone cannot: a horizon. A mirror reflecting
+only lights and a smooth sky reads as a blob — the horizon is the line the eye needs
+to believe a reflection is a reflection.
+
+**Liquid mercury.** The silhouette never moved. `shell()` was `length(p)-1.` for
+every family and family 3 only perturbed the normal, which is a painted ball. The
+field now carries the displacement for family 3, so the outline deforms and the
+normal follows for free; the march steps shorter in proportion, since a displaced SDF
+overestimates distance. Shaded as a metal against the rig: no diffuse term, tint in
+F0 rather than a wash laid over the reflection.
+
+**Solar cartography.** Three defects, two of them bug classes already hit elsewhere in
+this project. The chemistry texture clamped both axes, so the shader's own lookup
+stretched the border column into a seam down the sphere — longitude is periodic and
+is `REPEAT` now. `atan(p.z, p.x)` is undefined at exactly the poles, guarded the way
+`envLight` guards its azimuth. And the Gray–Scott laplacian stepped a uniform texel
+distance in both axes, while a texel of longitude covers a shrinking angle toward the
+poles — diffusion was anisotropic and dragged cells into streaks, so the longitude
+step is stretched by `1/sin(colatitude)`.
+
+Then shaded as a luminous body: limb *darkening* where it used to brighten at the
+rim, granulation, and relief taken from the gradient of the chemical map. The first
+attempt took that gradient with `dFdx`, which jumps at every silhouette and step
+boundary on a raymarched surface and printed blocks of noise across the disc;
+sampling the map directly is stable and costs four fetches.
+
+Mercury is out of review. Cartography is better but not finished — the cells are
+still large and nothing rises above the limb.
+
 ### Measuring it
 
 Frame rate is a fact about the tab, not about the renderer: a throttled or

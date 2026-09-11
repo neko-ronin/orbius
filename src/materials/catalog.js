@@ -180,9 +180,9 @@ export const materialPresets = [
   {
     id: "corona",
     name: "Solar cartography",
-    tag: "UNDER REVIEW / UNIMPRESSIVE",
+    tag: "UNDER REVIEW / IMPROVING",
     review:
-      "Very unimpressive. On the chopping block unless substantially improved.",
+      "Rebuilt: seam and pole singularity fixed, latitude-corrected diffusion, limb darkening, granulation and relief. Reads as a luminous body now rather than a decal, but the cells are still large and there is no corona or prominence above the limb.",
     mode: "orb",
     values: {
       family: 2,
@@ -196,9 +196,7 @@ export const materialPresets = [
   {
     id: "chrome",
     name: "Liquid mercury",
-    tag: "UNDER REVIEW / UNIMPRESSIVE",
-    review:
-      "Very unimpressive. On the chopping block unless substantially improved.",
+    tag: "REFLECTIVE SURFACE",
     mode: "orb",
     values: {
       family: 3,

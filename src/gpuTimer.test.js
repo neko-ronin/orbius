@@ -100,3 +100,22 @@ test("queries are recycled rather than allocated every frame", () => {
   }
   assert.equal(gl.live(), 1);
 });
+
+test("reset drops queries still in flight from the workspace being left", () => {
+  const gl = fakeGl();
+  const timer = new GpuTimer(gl);
+  timer.span("simulate", () => {});
+  timer.reset();
+  // The frame that was in flight resolves after the reset. It must not resurrect
+  // the label, or a breakdown shows a pass the current workspace never runs.
+  gl.resolve(5);
+  timer.span("material", () => {});
+  gl.resolve(2);
+  const { passes } = timer.poll();
+  assert.deepEqual(
+    passes.map((p) => p.label),
+    ["material"],
+  );
+  // and the discarded query is reused rather than leaked
+  assert.equal(gl.live(), 1);
+});

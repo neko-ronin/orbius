@@ -72,10 +72,14 @@ export class GpuTimer {
     return { passes, total: passes.reduce((sum, p) => sum + p.ms, 0) };
   }
   // Labels come and go with the workspace; stale ones would sit in the breakdown
-  // forever reporting a pass that no longer runs.
+  // forever reporting a pass that no longer runs. Queries already in flight have to
+  // go too — they belong to the workspace being left, and letting them land would
+  // re-register the very labels this is clearing.
   reset() {
     this.order = [];
     this.results.clear();
+    for (const { query } of this.pending) this.spare.push(query);
+    this.pending = [];
   }
   dispose() {
     for (const { query } of this.pending) this.gl.deleteQuery(query);
