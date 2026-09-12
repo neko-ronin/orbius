@@ -34,6 +34,7 @@ import {
   lightRoles,
   lightKeys,
 } from "./project.js";
+import { authorMessage } from "./shaders.js";
 import "./style.css";
 const tools = [
   ["cursor", "Orbit", "1"],
@@ -535,19 +536,24 @@ function App() {
     setFields([]);
     notify("Simulation restarted. Fields cleared.");
   }
-  function compile() {
-    try {
-      engine.current?.compile(shader);
-      update("family", "");
-      setCompiled(shader);
-      setShaderError("");
-      setDirty(true);
-      notify("Shader compiled successfully.");
-    } catch (e) {
-      setShaderError(e.message);
-      notify("Compile failed. The last working shader is still running.");
-    }
-  }
+  // Compiling and linking this shader measures about a millisecond, so this waits
+  // for a pause in typing rather than rationing an expensive operation. 350ms is
+  // roughly the gap between words: the render stays one thought behind the text
+  // instead of one keystroke, and a half-typed identifier never reaches the driver.
+  useEffect(() => {
+    if (shader === compiled) return;
+    const id = setTimeout(() => {
+      try {
+        engine.current?.compile(shader);
+        setCompiled(shader);
+        setShaderError("");
+      } catch (e) {
+        // The previous program is still running; only the message changes.
+        setShaderError(authorMessage(e.message));
+      }
+    }, 350);
+    return () => clearTimeout(id);
+  }, [shader, compiled]);
   async function capture() {
     try {
       const blob = await engine.current.capture();
@@ -1423,17 +1429,17 @@ function App() {
                 <>
                   {config.family && (
                     <p className="family-code-note">
-                      This editor is the Custom GLSL surface. Compiling switches
-                      to it and leaves the material family you had selected.
+                      This is the Custom GLSL surface, and it is compiling as
+                      you type. You are looking at{" "}
+                      <b>{familyById[config.family].name}</b>, so switch to see
+                      it.
+                      <button onClick={() => update("family", "")}>
+                        Show this surface
+                      </button>
                     </p>
                   )}
                   <div className="code-intro">
                     <span>surface.glsl</span>
-                    <span
-                      className={shader === compiled ? "success" : "warning"}
-                    >
-                      {shader === compiled ? "COMPILED" : "MODIFIED"}
-                    </span>
                   </div>
                   <p>
                     Define <code>shape(p)</code> and <code>pigment(p, n)</code>.
@@ -1441,6 +1447,7 @@ function App() {
                     surface.
                   </p>
                   <textarea
+                    className={shaderError ? "is-invalid" : ""}
                     spellCheck="false"
                     aria-label="GLSL shader source"
                     value={shader}
@@ -1455,10 +1462,6 @@ function App() {
                       {shaderError}
                     </pre>
                   )}
-                  <button className="primary-button" onClick={compile}>
-                    <Icon name="play" size={13} />
-                    Compile shader
-                  </button>
                   <div className="code-actions">
                     <button
                       onClick={() =>
@@ -1473,9 +1476,7 @@ function App() {
                     <button
                       onClick={() => {
                         setShader(defaultShader);
-                        notify(
-                          "Starter source restored in editor. Compile to apply.",
-                        );
+                        notify("Starter source restored in the editor.");
                       }}
                     >
                       Reset source

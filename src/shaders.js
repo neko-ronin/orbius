@@ -111,6 +111,30 @@ precision highp float;in vec2 uv;uniform sampler2D uTexture;uniform float uFade;
 export const compositeFragment = `#version 300 es
 precision highp float;in vec2 uv;uniform sampler2D uTexture;uniform vec2 uResolution;uniform float uBloom,uExposure,uGrain,uVignette,uTime;out vec4 frag;
 void main(){vec3 col=texture(uTexture,uv).rgb;vec3 glow=vec3(0);for(int i=0;i<12;i++){float a=float(i)*6.283185/12.;vec2 off=vec2(cos(a),sin(a))/uResolution*(uResolution.y/720.);glow+=texture(uTexture,uv+off*4.).rgb*.5+texture(uTexture,uv+off*12.).rgb*.3+texture(uTexture,uv+off*28.).rgb*.2;}col+=glow*uBloom/12.;col=vec3(1.)-exp(-col*uExposure);col=pow(col,vec3(.88));float v=length((uv-.5)*1.4);col*=1.-v*v*uVignette;float noise=fract(sin(dot(uv*uResolution,vec2(12.9898,78.233))+floor(uTime*24.))*43758.5453)-.5;col+=noise*uGrain;frag=vec4(max(col,vec3(.012,.014,.023)),1);}`;
+// orbFragment wraps the author's source in a scaffold, so the compiler counts lines
+// from the top of the assembled shader rather than the top of what they wrote.
+// Measured against a real driver message, not counted by eye: user line 1 is
+// reported as line 7.
+export const ORB_OFFSET = 6;
+// "ERROR: 0:9: 'NOPE' : undeclared identifier" is the compiler talking about its own
+// file. An author needs to know where in theirs.
+export function authorMessage(log, offset = ORB_OFFSET) {
+  return (
+    log
+      .split("\n")
+      // Driver logs are null-terminated, and the terminator arrives as its own line.
+      .map((line) => line.replace(/\0/g, "").trim())
+      .filter(Boolean)
+      .map((line) =>
+        line.replace(
+          /^(ERROR|WARNING):\s*\d+:(\d+):\s*/i,
+          (_, kind, n) =>
+            `Line ${Math.max(1, +n - offset)}${kind.toUpperCase() === "WARNING" ? " (warning)" : ""} · `,
+        ),
+      )
+      .join("\n")
+  );
+}
 export function orbFragment(source) {
   return `#version 300 es
 precision highp float;

@@ -234,7 +234,24 @@ two families may both call something `scale`; a file naming a family or a contro
 this build does not have has those values dropped rather than rejected, so older and
 newer files still open. Prismatic silk uses it for two of its own.
 
-**C. Compile as you type** — not yet.
+**C. Compile as you type** — done. The GLSL editor has no Compile button: edits
+land 350ms after you stop typing. Measured before designing it, because the answer
+decided the design — compiling and linking that shader is about a millisecond
+steady-state, with 55-90ms on the first two compiles while the driver's cache is
+cold. At a millisecond there is nothing to ration and no in-progress state worth
+drawing, so the debounce exists to avoid sending half-typed identifiers to the
+driver rather than to throttle a cost.
+
+Errors report the author's line, not the assembled shader's. The offset is measured
+against a real driver message rather than counted by eye, and the test derives it
+from the scaffold so it fails if the preamble grows. A failed compile keeps the last
+working program running, which is the property that makes typing into a live shader
+bearable at all: the editor shows a soft red edge and the line, and the render
+carries on.
+
+Still to come for authoring proper: editing a *family* rather than the custom
+surface, which needs somewhere for a user family to live — a record in the project
+rather than a module constant.
 
 ## 5. Recommended path
 
