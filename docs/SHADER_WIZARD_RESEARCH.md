@@ -211,6 +211,31 @@ single-program design it means re-rendering the chain truncated at each stage.
 up and a full frame is presently under 5ms, so there is headroom to spend here
 deliberately rather than hopefully.
 
+## 4b. What has been built
+
+**A. Family as a value** — done (`3401712`). `src/materials/families.js` holds the
+registry and the scaffold; `fragment.js` is gone. A family is `{id, name, kind,
+glsl}`, compiled per family and cached on identity and source. Two kinds so far,
+`volume` and `surface`, which is what rebuilding Solar cartography and Liquid mercury
+proved was actually needed. Loop bounds live in the scaffold and only there.
+
+**B. Self-describing parameters** — done. A family declares controls in its own
+source:
+
+```glsl
+// @control filament 4 60 0.5 "How tightly the sheets pinch into threads." "isosurface"
+// @default filament 24
+```
+
+The parser builds the same six-tuple every panel already consumes, the scaffold
+declares `uniform float uFilament`, the engine binds it, and the panel grows a
+section named after the family. Values live in `config.params[familyId]`, nested so
+two families may both call something `scale`; a file naming a family or a control
+this build does not have has those values dropped rather than rejected, so older and
+newer files still open. Prismatic silk uses it for two of its own.
+
+**C. Compile as you type** — not yet.
+
 ## 5. Recommended path
 
 **A + B + C first**, as one piece of work. A family becomes a record, declares its

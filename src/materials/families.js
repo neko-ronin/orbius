@@ -130,12 +130,16 @@ export const builtins = [
     id: "silk",
     name: "Prismatic silk",
     kind: "volume",
-    glsl: `float displace(vec3 p){return 0.;}
+    glsl: `// @control filament 4 60 0.5 "How tightly the sheets pinch into threads. Low values give broad veils; high values give fine silk." "isosurface thickness volumetric"
+// @default filament 24
+// @control weave 0.5 3 0.05 "How many times the interference pattern repeats through the volume." "trigonometric interference surface"
+// @default weave 1
+float displace(vec3 p){return 0.;}
 vec4 medium(vec3 q){
- vec3 w=q*uMaterialScale;
+ vec3 w=q*uMaterialScale*uWeave;
  w+=sin(w.yzx*1.5+uTime*uInteriorMotion)*uMaterialFold;
  float v=dot(sin(w),cos(w.zxy));
- float den=exp(-abs(v)*24.)*.6;
+ float den=exp(-abs(v)*uFilament)*.6;
  vec3 c=.5+.5*cos(vec3(0,2,4)+w.y*1.2+w.z);
  // Constants carried over from this family's own integrator, which the scaffold's
  // canonical one replaced: 1.137 and 1.368 make the two agree to within a few

@@ -2,7 +2,12 @@ import { ObjectRenderer } from "./objects/Renderer.js";
 import { SpeciesField } from "./particles/SpeciesField.js";
 import { Chemistry } from "./materials/Chemistry.js";
 import { materialDefaults } from "./materials/catalog.js";
-import { familyById, familySource } from "./materials/families.js";
+import {
+  familyById,
+  familySource,
+  parseControls,
+  uniformName,
+} from "./materials/families.js";
 import { GpuTimer } from "./gpuTimer.js";
 import {
   quadVertex,
@@ -589,6 +594,12 @@ export class Engine {
           ["container", "interior"].includes(key) ? "int" : undefined,
         );
       }
+      // Whatever this family declared for itself, from the project or its own
+      // default. Nothing here knows the names; the shader is the only source.
+      const declared = parseControls(family.glsl);
+      const chosen = c.params?.[family.id] ?? {};
+      for (const [name, fallback] of Object.entries(declared.defaults))
+        this.uniform(material, uniformName(name), chosen[name] ?? fallback);
       this.uniform(material, "uChemistry", 1, "int");
       bindRig(material);
       this.uniform(material, "uSteps", this.show ? 160 : 88, "int");

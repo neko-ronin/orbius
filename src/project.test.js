@@ -351,3 +351,37 @@ test("the studio rig resolves placement, colour temperature and drift", () => {
   for (let t = 0; t < 60; t += 0.37)
     assert.ok(rig({ keyFlicker: 1, keyIntensity: 1 }, t).color[0] >= 0);
 });
+
+test("a family's own declared parameters round trip, clamp, and survive a family it does not know", () => {
+  const p = fixture();
+  p.config.family = "silk";
+  p.config.params = { silk: { filament: 41, weave: 2.5 } };
+  const restored = validateProject(JSON.parse(JSON.stringify(p)));
+  assert.deepEqual(restored.config.params, {
+    silk: { filament: 41, weave: 2.5 },
+  });
+
+  // A value outside what the shader declared is refused, the same as any control.
+  for (const bad of [{ filament: 500 }, { filament: "x" }, { weave: NaN }]) {
+    const q = fixture();
+    q.config.params = { silk: bad };
+    assert.throws(() => validateProject(q));
+  }
+
+  // Names and families this build does not have describe controls nothing can read,
+  // so they are dropped rather than rejected — an older or newer file still opens.
+  const alien = fixture();
+  alien.config.params = {
+    silk: { filament: 30, notAControl: 9 },
+    nosuchfamily: { anything: 1 },
+  };
+  assert.deepEqual(validateProject(alien).config.params, {
+    silk: { filament: 30 },
+  });
+
+  for (const shape of [[], "no", 3]) {
+    const q = fixture();
+    q.config.params = shape;
+    assert.throws(() => validateProject(q));
+  }
+});

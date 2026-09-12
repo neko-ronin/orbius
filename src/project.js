@@ -1,5 +1,5 @@
 import { validateObjects } from "./objects/model.js";
-import { familyById, LEGACY } from "./materials/families.js";
+import { familyById, LEGACY, parseControls } from "./materials/families.js";
 import { speciesDefaults, speciesControls } from "./particles/catalog.js";
 import { materialDefaults, materialControls } from "./materials/catalog.js";
 export const palettes = [
@@ -251,6 +251,9 @@ export const defaults = {
   stageFloor: -1.15,
   stageRoughness: 0.42,
   stageTexture: 0.55,
+  // Values for the controls a family declares in its own source, nested by family
+  // id so two families may both call something "scale" without colliding.
+  params: {},
   ...lightDefaults,
 };
 // The parameters a saved particle project carries into a glass enclosure. Trail,
@@ -841,6 +844,31 @@ export function validateProject(data) {
   for (const key of Object.keys(defaults)) {
     const value = data.config?.[key];
     if (value === undefined) continue;
+    if (key === "params") {
+      if (value === null || typeof value !== "object" || Array.isArray(value))
+        throw Error("Invalid family parameters.");
+      const params = {};
+      for (const [id, values] of Object.entries(value)) {
+        const family = familyById[id];
+        // A file may name a family this build does not have. Dropping its values is
+        // right: they describe controls nothing can read.
+        if (!family || !values || typeof values !== "object") continue;
+        const { controls: declared } = parseControls(family.glsl);
+        const kept = {};
+        for (const [name, v] of Object.entries(values)) {
+          const control = declared[name];
+          if (!control) continue;
+          if (typeof v !== "number" || !Number.isFinite(v))
+            throw Error(`Invalid ${id} parameter ${name}.`);
+          if (v < control[1] || v > control[2])
+            throw Error(`${id} parameter ${name} is outside its range.`);
+          kept[name] = v;
+        }
+        if (Object.keys(kept).length) params[id] = kept;
+      }
+      config.params = params;
+      continue;
+    }
     if (key === "family") {
       // Families were integers before they were values. A file written then must
       // still open now, so the old number maps to the id it became.

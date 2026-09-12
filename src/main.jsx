@@ -19,6 +19,7 @@ import { createRoot } from "react-dom/client";
 import Icon from "./Icons.jsx";
 import NodeEditor from "./NodeEditor.jsx";
 import Control from "./studio/Control.jsx";
+import { familyById, parseControls } from "./materials/families.js";
 import { Engine } from "./engine.js";
 import {
   defaults,
@@ -730,6 +731,39 @@ function App() {
     setDirty(true);
     engine.current?.clear();
   }
+  // Controls a family declared in its own source. They write into a namespace keyed
+  // by family, so the panel needs no list of them and two families may both call
+  // something "scale".
+  function familyControls() {
+    const family = familyById[config.family];
+    if (!family) return null;
+    const { controls: declared, defaults: fallback } = parseControls(
+      family.glsl,
+    );
+    const names = Object.keys(declared);
+    if (!names.length) return null;
+    return [
+      `${family.name}`,
+      names.map((name) => (
+        <Control
+          key={name}
+          id={`${family.id}.${name}`}
+          entry={declared[name]}
+          value={config.params?.[family.id]?.[name] ?? fallback[name]}
+          onChange={(next) =>
+            setConfig((c) => ({
+              ...c,
+              params: {
+                ...c.params,
+                [family.id]: { ...c.params?.[family.id], [name]: next },
+              },
+            })) || setDirty(true)
+          }
+          tip={tip}
+        />
+      )),
+    ];
+  }
   function control(key) {
     const p =
         key === "reflection" && (resolved.mode === "glass" || config.family)
@@ -1295,6 +1329,7 @@ function App() {
                   ]
                 : resolved.mode === "orb" && config.family
                   ? [
+                      ...[familyControls()].filter(Boolean),
                       ...materialSections.orb.slice(0, 2),
                       ...lightRoles.map(([id, label]) => [
                         `${label} light`,
@@ -1310,7 +1345,7 @@ function App() {
                     <Icon name="down" size={13} />
                   </summary>
                   <div className="section-controls">
-                    {keys.map(control)}
+                    {keys.map((k) => (typeof k === "string" ? control(k) : k))}
                     {title === "Interaction" && (
                       <label className="color-picker">
                         Light color
