@@ -225,8 +225,25 @@ attempt took that gradient with `dFdx`, which jumps at every silhouette and step
 boundary on a raymarched surface and printed blocks of noise across the disc;
 sampling the map directly is stable and costs four fetches.
 
-Mercury is out of review. Cartography is better but not finished — the cells are
-still large and nothing rises above the limb.
+The two things left over from that pass are now done. **Cell size** is not a shader
+constant at all: Gray-Scott's structure size is fixed in texels by its rates, so the
+map's resolution is what decides how large a cell looks on the sphere. 256x128 drew
+a dozen boulders; 1024x512 draws granulation, for a simulation that still costs
+under a millisecond. The seed was coarsened to match and the map is walked further
+before it is first shown, or the first second is a grid of blocks.
+
+**The corona** could not be written inside `surface()` at all — it lives where the
+ray misses the star, and the scaffold returned background there for every family.
+So the scaffold grew one optional hook: a family writes `#define HAS_HALO` and its
+own `vec3 halo(vec3 ro, vec3 rd)`, and without one the miss path costs a return.
+Cartography's halo takes the ray's closest approach to the star, samples the
+chemistry along that direction, and grows its reach from the activity it finds —
+so a streamer stands over an active region instead of the whole thing being an even
+shell of fog. Contained inside a glass shell the same hook draws the corona through
+the enclosure's camera, and its exponential falloff is what keeps it from washing
+over the rest of the frame.
+
+Both families are out of review.
 
 ### Measuring it
 
@@ -254,4 +271,4 @@ composite, not any of the glass work.
 - Visual checks included development view and show view. The new result has legible particle strata and a much stronger glass outline. It is not asserted to match the reference's cinematic optics, internal depth richness, or fine fluid motion.
 - Local reproducible render matrix: `output/studio-qa/index.html` (ignored development artifact). Research contact sheet: `/tmp/boast-topography.jpg` (temporary).
 
-Next quality gates: compare glass and interior at matching camera/scale to the clip; test high-concavity imported shells; improve multi-object transmission ordering; offer art-directed lighting environments; expand procedural layer fields only after the current ones prove useful in the user's hands. Keep mercury/cartography flagged until their output earns a different verdict.
+Next quality gates: compare glass and interior at matching camera/scale to the clip; test high-concavity imported shells; improve multi-object transmission ordering; offer art-directed lighting environments; expand procedural layer fields only after the current ones prove useful in the user's hands.

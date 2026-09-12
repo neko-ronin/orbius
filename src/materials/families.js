@@ -86,6 +86,12 @@ float displace(vec3 p);
 // here: a family contributes function bodies, never a bound, so no authored or
 // imported family can hang the GPU with an unbounded march.
 const TAIL = (kind) => `
+// Anything outside the silhouette. A family opts in with \`#define HAS_HALO\` and its
+// own \`halo\`; without one the miss path costs a return. Solar cartography needs it
+// because a star's corona is the part of it that is not the star.
+#ifndef HAS_HALO
+vec3 halo(vec3 ro,vec3 rd){return vec3(0.);}
+#endif
 float shell(vec3 p){return length(p)-1.+displace(p);}
 vec3 normalAt(vec3 p){vec2 e=vec2(.002,0);return normalize(vec3(shell(p+e.xyy)-shell(p-e.xyy),shell(p+e.yxy)-shell(p-e.yxy),shell(p+e.yyx)-shell(p-e.yyx)));}
 void main(){
@@ -103,7 +109,7 @@ void main(){
   // Start at the sphere rather than walking to it: placed small, the entry point is
   // far outside the march's range, and the body would simply never be reached.
   float b=dot(ro,rd),c=dot(ro,ro)-1.;float disc=b*b-c;
-  if(disc<0.){frag=vec4(0,0,0,1);return;}
+  if(disc<0.){frag=vec4(halo(ro,rd),1);return;}
   travel=max(0.,-b-sqrt(disc));
  }
  // A displaced field overestimates distance, so the step shortens with how far the
@@ -113,8 +119,8 @@ void main(){
   if(d<.0015){hit=true;break;}travel+=max(d*safe,.001);if(travel>7.)break;}
  vec3 color=vec3(.003,.005,.009);
  // Contained, this is composited additively into somebody else's frame, so a miss
- // must contribute nothing rather than its own background.
- if(!hit){frag=vec4(uContained>.5?vec3(0.):color,1);return;}
+ // contributes the family's halo and nothing else — never its own background.
+ if(!hit){vec3 h=halo(ro,rd);frag=vec4(uContained>.5?h:color+h,1);return;}
  vec3 n=normalAt(p);float fres=pow(1.-max(0.,dot(n,-rd)),5.);
 ${
   kind === "volume"
@@ -175,17 +181,38 @@ vec4 medium(vec3 q){
     id: "solar",
     name: "Solar cartography",
     kind: "surface",
-    glsl: `float displace(vec3 p){return 0.;}
+    glsl: `#define HAS_HALO
+// @control corona 0 1.5 0.05 "How far the atmosphere reaches past the limb. Streamers grow from wherever the surface is active, so a quiet star keeps a thin ring." "corona atmosphere prominence limb"
+// @default corona 0.6
+float displace(vec3 p){return 0.;}
+// The pole is where atan(0,0) is undefined, on the surface and above it alike.
+vec2 sphereMap(vec3 d){
+ return vec2(atan(d.z,abs(d.x)<1e-5&&abs(d.z)<1e-5?1.:d.x)/6.283185+.5,
+  acos(clamp(d.y,-1.,1.))/3.141593);
+}
+vec3 halo(vec3 ro,vec3 rd){
+ // Closest approach to the star. Behind the camera there is nothing to glow.
+ float t=-dot(ro,rd);
+ if(t<=0.)return vec3(0.);
+ vec3 near=ro+rd*t;float d=length(near);
+ if(d<1.)return vec3(0.);
+ vec3 dir=near/d;
+ // Anchored to the chemistry, so a streamer stands over an active region rather
+ // than being an even shell of fog.
+ float act=texture(uChemistry,sphereMap(dir)).g;
+ float reach=.05+act*.45*uCorona;
+ float glow=exp(-(d-1.)/max(reach,.015));
+ float flicker=.65+.35*noise(dir*11.+uTime*uInteriorMotion*.5);
+ return mix(vec3(1.,.42,.1),uColorA,.3)*glow*flicker*uEmission*uCorona*.5;
+}
 vec3 surface(vec3 p,vec3 n,vec3 rd,float fres){
  vec3 q=p*uMaterialScale;
- // atan(0,0) is undefined and that is exactly the pole of the sphere.
- vec2 sphereUV=vec2(atan(p.z,abs(p.x)<1e-5&&abs(p.z)<1e-5?1.:p.x)/6.283185+.5,
-  acos(clamp(p.y,-1.,1.))/3.141593);
+ vec2 sphereUV=sphereMap(p);
  float chemical=texture(uChemistry,sphereUV).g;
  float grain=fbm(q*2.)*.12+fbm(q*7.)*.05;
  float f=chemical*1.5+grain;
  float front=1.-smoothstep(.025,.075,abs(f-uSurfaceActivity*.65));
- vec2 tx=vec2(1./256.,1./128.);
+ vec2 tx=1./vec2(textureSize(uChemistry,0));
  vec2 g=vec2(texture(uChemistry,sphereUV+vec2(tx.x,0)).g-texture(uChemistry,sphereUV-vec2(tx.x,0)).g,
              texture(uChemistry,sphereUV+vec2(0,tx.y)).g-texture(uChemistry,sphereUV-vec2(0,tx.y)).g);
  float relief=clamp(.7+(g.x*.8-g.y*.55)*5.,0.,1.5);

@@ -1,8 +1,13 @@
 import { quadVertex } from "../shaders.js";
+// Cell size is set in texels by the reaction's fixed rates, so the map's resolution
+// is what decides how large a cell looks on the sphere. 256x128 drew a handful of
+// boulders; this draws granulation.
+const W = 1024,
+  H = 512;
 const update = `#version 300 es
 precision highp float;in vec2 uv;out vec4 frag;uniform sampler2D uState;uniform float uSeed,uFeed,uKill;
 vec2 sampleAt(vec2 p){if(p.y<0.)p=vec2(p.x+.5,-p.y);if(p.y>1.)p=vec2(p.x+.5,2.-p.y);return texture(uState,vec2(fract(p.x),clamp(p.y,0.,1.))).rg;}
-void main(){if(uSeed>0.){float spot=step(.83,fract(sin(dot(floor(uv*32.),vec2(127.1,311.7)))*43758.54));frag=vec4(1.-spot*.5,spot*.5,0,1);return;}
+void main(){if(uSeed>0.){float spot=step(.83,fract(sin(dot(floor(uv*vec2(96.,48.)),vec2(127.1,311.7)))*43758.54));frag=vec4(1.-spot*.5,spot*.5,0,1);return;}
 vec2 d=1./vec2(textureSize(uState,0));
 // One texel of longitude covers a shrinking angle toward the poles, so a uniform
 // stencil diffuses anisotropically and drags cells into streaks. Stretch the
@@ -27,8 +32,8 @@ export class Chemistry {
         gl.TEXTURE_2D,
         0,
         engine.hdr ? gl.RGBA16F : gl.RGBA8,
-        256,
-        128,
+        W,
+        H,
         0,
         gl.RGBA,
         engine.hdr ? gl.HALF_FLOAT : gl.UNSIGNED_BYTE,
@@ -57,7 +62,7 @@ export class Chemistry {
     const e = this.engine,
       g = e.gl;
     g.bindFramebuffer(g.FRAMEBUFFER, this.targets[1 - this.read].fb);
-    g.viewport(0, 0, 256, 128);
+    g.viewport(0, 0, W, H);
     g.bindVertexArray(e.emptyVAO);
     g.activeTexture(g.TEXTURE1);
     g.bindTexture(g.TEXTURE_2D, this.targets[this.read].tex);
@@ -69,7 +74,9 @@ export class Chemistry {
   }
   reset() {
     this.step(true);
-    for (let i = 0; i < 80; i++) this.step();
+    // Finer cells grow from the seed more slowly in texel terms, so the map is walked
+    // further before it is first shown.
+    for (let i = 0; i < 220; i++) this.step();
     this.accumulator = 0;
   }
   advance(dt, feed, kill) {

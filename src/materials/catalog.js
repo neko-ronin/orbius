@@ -192,9 +192,7 @@ export const materialPresets = [
   {
     id: "corona",
     name: "Solar cartography",
-    tag: "UNDER REVIEW / IMPROVING",
-    review:
-      "Rebuilt: seam and pole singularity fixed, latitude-corrected diffusion, limb darkening, granulation and relief. Reads as a luminous body now rather than a decal, but the cells are still large and there is no corona or prominence above the limb.",
+    tag: "LUMINOUS SURFACE",
     mode: "orb",
     values: {
       family: "solar",
