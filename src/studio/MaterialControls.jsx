@@ -181,12 +181,6 @@ export default function MaterialControls({
           </button>
         </div>
       )}
-      {config.family === "solar" && (
-        <p className="material-review">
-          Under review · improving. Reads as a luminous body now, but the cells
-          are large and nothing rises above the limb.
-        </p>
-      )}
       {config.family !== "composer" ? (
         // This selects a built-in and applies its tuned settings; it does not create
         // anything. It used to say "Create a shader family", which is what the two

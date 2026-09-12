@@ -705,7 +705,8 @@ export class Engine {
         // Whatever this family declared for itself, from the project or its own
         // default. Nothing here knows the names; the shader is the only source.
         const declared = parseControls(family.glsl);
-        const chosen = look.params ?? c.params?.[family.id] ?? {};
+        // The orb workspace is the scene, so its own params are the only source.
+        const chosen = c.params?.[family.id] ?? {};
         for (const [name, fallback] of Object.entries(declared.defaults))
           this.uniform(material, uniformName(name), chosen[name] ?? fallback);
         this.uniform(material, "uChemistry", 1, "int");

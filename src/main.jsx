@@ -657,7 +657,10 @@ function App() {
   }
   useEffect(() => {
     function key(e) {
-      if (e.target.closest("input,textarea,select,[contenteditable]")) return;
+      // A keydown can arrive with a non-element target, and an exception thrown
+      // here takes the whole handler down with it.
+      if (e.target?.closest?.("input,textarea,select,[contenteditable]"))
+        return;
       const k = e.key.toLowerCase();
       if ((e.metaKey || e.ctrlKey) && k === "s") {
         e.preventDefault();
