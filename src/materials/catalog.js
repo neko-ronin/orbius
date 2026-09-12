@@ -4,7 +4,7 @@ export const materialDefaults = {
   ...composerDefaults,
   reactionFeed: 0.036,
   reactionKill: 0.061,
-  family: 0,
+  family: "",
   container: 0,
   interior: 0,
   glassClarity: 0.92,
@@ -170,7 +170,7 @@ export const materialPresets = [
     tag: "IRIDESCENT VOLUME",
     mode: "orb",
     values: {
-      family: 1,
+      family: "silk",
       palette: 4,
       materialFold: 0.65,
       materialScale: 3.2,
@@ -185,7 +185,7 @@ export const materialPresets = [
       "Rebuilt: seam and pole singularity fixed, latitude-corrected diffusion, limb darkening, granulation and relief. Reads as a luminous body now rather than a decal, but the cells are still large and there is no corona or prominence above the limb.",
     mode: "orb",
     values: {
-      family: 2,
+      family: "solar",
       palette: 1,
       materialScale: 4.8,
       surfaceActivity: 0.48,
@@ -199,7 +199,7 @@ export const materialPresets = [
     tag: "REFLECTIVE SURFACE",
     mode: "orb",
     values: {
-      family: 3,
+      family: "mercury",
       palette: 2,
       materialFold: 0.48,
       materialScale: 2.4,

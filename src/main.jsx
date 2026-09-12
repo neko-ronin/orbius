@@ -537,7 +537,7 @@ function App() {
   function compile() {
     try {
       engine.current?.compile(shader);
-      update("family", 0);
+      update("family", "");
       setCompiled(shader);
       setShaderError("");
       setDirty(true);
@@ -732,7 +732,7 @@ function App() {
   }
   function control(key) {
     const p =
-        key === "reflection" && (resolved.mode === "glass" || config.family > 0)
+        key === "reflection" && (resolved.mode === "glass" || config.family)
           ? ["Studio reflections", ...controls[key].slice(1)]
           : controls[key],
       v = config[key];
@@ -744,17 +744,17 @@ function App() {
       )
         return null;
     }
-    if (resolved.mode === "orb" && config.family > 0) {
+    if (resolved.mode === "orb" && config.family) {
       const relevant =
-        config.family === 1 || config.family === 4
+        config.family === "silk" || config.family === "composer"
           ? [
               "materialScale",
               "materialFold",
               "interiorMotion",
               "emission",
-              ...(config.family === 4 ? ["reflection"] : []),
+              ...(config.family === "composer" ? ["reflection"] : []),
             ]
-          : config.family === 2
+          : config.family === "solar"
             ? [
                 "materialScale",
                 "surfaceActivity",
@@ -971,7 +971,7 @@ function App() {
                 </div>
                 <div className="stage-top-right">
                   {resolved.mode === "orb"
-                    ? config.family === 0
+                    ? !config.family
                       ? "SDF / CUSTOM SURFACE"
                       : "GPU / MATERIAL FAMILY"
                     : resolved.mode === "particles"
@@ -1240,7 +1240,7 @@ function App() {
                     setConfig((c) => ({
                       ...c,
                       ...materialBase,
-                      family: 4,
+                      family: "composer",
                       materialScale: 3.2,
                       materialFold: 0.65,
                       emission: 1.5,
@@ -1293,7 +1293,7 @@ function App() {
                       : []),
                     ["Render quality", ["devScale", "showScale"]],
                   ]
-                : resolved.mode === "orb" && config.family > 0
+                : resolved.mode === "orb" && config.family
                   ? [
                       ...materialSections.orb.slice(0, 2),
                       ...lightRoles.map(([id, label]) => [
@@ -1386,7 +1386,7 @@ function App() {
             <div className="code-panel">
               {resolved.mode === "orb" ? (
                 <>
-                  {config.family > 0 && (
+                  {config.family && (
                     <p className="family-code-note">
                       This editor is the Custom GLSL surface. Compiling switches
                       to that family; the built-in material keeps its own

@@ -1,8 +1,8 @@
 import { ObjectRenderer } from "./objects/Renderer.js";
 import { SpeciesField } from "./particles/SpeciesField.js";
 import { Chemistry } from "./materials/Chemistry.js";
-import { materialFragment } from "./materials/fragment.js";
 import { materialDefaults } from "./materials/catalog.js";
+import { familyById, familySource } from "./materials/families.js";
 import { GpuTimer } from "./gpuTimer.js";
 import {
   quadVertex,
@@ -59,7 +59,6 @@ export class Engine {
     this.particles = this.program(particleVertex, particleFragment);
     this.fade = this.program(quadVertex, fadeFragment);
     this.composite = this.program(quadVertex, compositeFragment);
-    this.material = this.program(quadVertex, materialFragment);
     this.orb = this.program(quadVertex, orbFragment(defaultShader));
     const gl = this.gl;
     this.emptyVAO = gl.createVertexArray();
@@ -104,6 +103,19 @@ export class Engine {
     } finally {
       shaders.forEach((s) => gl.deleteShader(s));
     }
+  }
+  // One program per family, compiled on first use and kept. A family is a value, so
+  // the cache key is its identity and its source: an edited family recompiles, an
+  // unchanged one does not.
+  familyProgram(family) {
+    this.families ??= new Map();
+    const key = `${family.id}:${family.glsl.length}:${family.glsl}`;
+    let program = this.families.get(key);
+    if (!program) {
+      program = this.program(quadVertex, familySource(family));
+      this.families.set(key, program);
+    }
+    return program;
   }
   compile(source) {
     const next = this.program(quadVertex, orbFragment(source));
@@ -419,10 +431,15 @@ export class Engine {
     // Pass labels belong to a workspace. Resetting on clear() missed the paths that
     // change mode without clearing — loading a project, restoring an autosave — and
     // left the particle solver's timing sitting in the orb breakdown.
-    if (this.timedMode !== this.mode) {
+    // Keyed on the family too, not just the mode: switching between a material
+    // family and the custom surface changes which passes run, and a label that
+    // stops being produced would otherwise sit in the breakdown reporting a pass
+    // that no longer exists.
+    const timing = `${this.mode}:${c.family ?? ""}`;
+    if (this.timedMode !== timing) {
       this.timer.reset();
       this.gpu = null;
-      this.timedMode = this.mode;
+      this.timedMode = timing;
     }
     // One rig per frame, bound to whichever program draws. Glass resolves its own
     // inside ObjectRenderer; orb and material take it here.
@@ -543,8 +560,10 @@ export class Engine {
             gl.drawArrays(gl.POINTS, 0, this.count);
           }),
       );
-    } else if (this.mode === "orb" && c.family > 0) {
-      if (this.mode === "orb" && c.family === 2)
+    } else if (this.mode === "orb" && familyById[c.family]) {
+      const family = familyById[c.family];
+      const material = this.familyProgram(family);
+      if (c.family === "solar")
         this.chemistry.advance(dt, c.reactionFeed, c.reactionKill);
       gl.activeTexture(gl.TEXTURE1);
       gl.bindTexture(gl.TEXTURE_2D, this.chemistry.texture);
@@ -552,7 +571,7 @@ export class Engine {
       gl.viewport(0, 0, w, h);
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.targets[this.trailRead].fb);
       gl.bindVertexArray(this.emptyVAO);
-      this.set(this.material, {
+      this.set(material, {
         ...shared,
         uResolution: [w, h],
         uIor: c.ior,
@@ -562,15 +581,15 @@ export class Engine {
       for (const key of Object.keys(materialDefaults)) {
         const uniform = "u" + key[0].toUpperCase() + key.slice(1);
         this.uniform(
-          this.material,
+          material,
           uniform,
           c[key],
-          ["family", "container", "interior"].includes(key) ? "int" : undefined,
+          ["container", "interior"].includes(key) ? "int" : undefined,
         );
       }
-      this.uniform(this.material, "uChemistry", 1, "int");
-      bindRig(this.material);
-      this.uniform(this.material, "uSteps", this.show ? 160 : 88, "int");
+      this.uniform(material, "uChemistry", 1, "int");
+      bindRig(material);
+      this.uniform(material, "uSteps", this.show ? 160 : 88, "int");
       this.timer.span("material", () => gl.drawArrays(gl.TRIANGLES, 0, 3));
     } else if (this.mode === "orb") {
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.targets[this.trailRead].fb);

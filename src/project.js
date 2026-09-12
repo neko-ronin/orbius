@@ -1,4 +1,5 @@
 import { validateObjects } from "./objects/model.js";
+import { familyById, LEGACY } from "./materials/families.js";
 import { speciesDefaults, speciesControls } from "./particles/catalog.js";
 import { materialDefaults, materialControls } from "./materials/catalog.js";
 export const palettes = [
@@ -840,6 +841,18 @@ export function validateProject(data) {
   for (const key of Object.keys(defaults)) {
     const value = data.config?.[key];
     if (value === undefined) continue;
+    if (key === "family") {
+      // Families were integers before they were values. A file written then must
+      // still open now, so the old number maps to the id it became.
+      // 0 meant the custom GLSL surface; 1-4 were the built-ins. Anything else was
+      // never valid and must not quietly become the custom surface.
+      const id =
+        typeof value === "number" ? (value === 0 ? "" : LEGACY[value]) : value;
+      if (id === undefined || (id !== "" && !familyById[id]))
+        throw Error("Unknown material family.");
+      config.family = id;
+      continue;
+    }
     if (key === "lightColor") {
       if (!/^#[0-9a-f]{6}$/i.test(value)) throw Error("Invalid light color.");
     } else if (typeof value !== "number" || !Number.isFinite(value))
@@ -852,10 +865,8 @@ export function validateProject(data) {
     )
       throw Error("Unknown palette.");
     if (
-      ["family", "container", "interior"].includes(key) &&
-      (!Number.isInteger(value) ||
-        value < 0 ||
-        value > (key === "family" ? 4 : 2))
+      ["container", "interior"].includes(key) &&
+      (!Number.isInteger(value) || value < 0 || value > 2)
     )
       throw Error(`Unknown ${key}.`);
     if (

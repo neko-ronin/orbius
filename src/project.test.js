@@ -138,7 +138,7 @@ test("legacy projects acquire new system defaults without changing their custom 
   const p = fixture();
   p.config = { count: 40000, spin: 0.7 };
   const restored = validateProject(p);
-  assert.equal(restored.config.family, 0);
+  assert.equal(restored.config.family, "");
   assert.equal(restored.config.speciesEnabled, 0);
   assert.equal(restored.config.glassClarity, 0.92);
   assert.equal(restored.shader, p.shader);
@@ -160,6 +160,8 @@ test("glass containers and interior recipes round trip independently", () => {
 test("material families, chemical parameters and directional species couplings are validated", () => {
   for (const [key, value] of [
     ["family", 5],
+    ["family", "nonesuch"],
+    ["family", true],
     ["container", 0.5],
     ["interior", -1],
     ["reactionFeed", 0.2],
@@ -185,14 +187,32 @@ test("glass is a peer source in the node composer", () => {
 });
 
 test("composed shader families round trip and reject invalid operators", () => {
+  // A family is an id now. The integer a file written before that carried has to
+  // still open, and land on the family it became.
+  const legacy = fixture();
+  legacy.config.family = 4;
+  assert.equal(validateProject(legacy).config.family, "composer");
+  const zero = fixture();
+  zero.config.family = 0;
+  assert.equal(validateProject(zero).config.family, "");
+  for (const [n, id] of Object.entries({
+    1: "silk",
+    2: "solar",
+    3: "mercury",
+  })) {
+    const f = fixture();
+    f.config.family = +n;
+    assert.equal(validateProject(f).config.family, id);
+  }
+
   const p = fixture();
-  p.config.family = 4;
+  p.config.family = "composer";
   p.config.fieldA = 3;
   p.config.fieldB = 2;
   p.config.fieldOperation = 3;
   p.config.fieldWidth = 0.04;
   const restored = validateProject(JSON.parse(JSON.stringify(p)));
-  assert.equal(restored.config.family, 4);
+  assert.equal(restored.config.family, "composer");
   assert.equal(restored.config.fieldOperation, 3);
   assert.equal(restored.config.fieldWidth, 0.04);
   for (const [key, value] of [
