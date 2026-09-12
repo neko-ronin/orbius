@@ -29,17 +29,27 @@ function resolveIn(area, name) {
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let size = 0;
+    let over = false;
     const parts = [];
     req.on("data", (chunk) => {
       size += chunk.length;
       if (size > LIMIT) {
-        reject(Error("Payload too large."));
-        req.destroy();
+        // Stop buffering but keep draining. Destroying the socket here would reach
+        // the caller as a network error instead of a reason, and a save that fails
+        // for a knowable cause should say so.
+        over = true;
+        parts.length = 0;
         return;
       }
       parts.push(chunk);
     });
-    req.on("end", () => resolve(Buffer.concat(parts).toString("utf8")));
+    req.on("end", () =>
+      over
+        ? reject(
+            Error(`Too large: ${(size / 1048576) | 0}MB exceeds the limit.`),
+          )
+        : resolve(Buffer.concat(parts).toString("utf8")),
+    );
     req.on("error", reject);
   });
 }
