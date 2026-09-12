@@ -1311,22 +1311,6 @@ input[type="color"] {
   line-height: 1.7;
   margin: 0;
 }
-.code-panel textarea {
-  min-height: 310px;
-  flex: 1;
-  resize: vertical;
-  background: #0b0a10;
-  border: 1px solid #30263b;
-  border-radius: 4px;
-  padding: 12px;
-  font:
-    10px/1.7 ui-monospace,
-    monospace;
-  tab-size: 2;
-  color: #b9a3d4;
-  white-space: pre;
-  overflow: auto;
-}
 .primary-button {
   background: #b8a0e7;
   color: #21132e !important;
@@ -1927,7 +1911,7 @@ input[type="color"] {
   .stage-hint {
     bottom: 65px;
   }
-  .code-panel textarea {
+  .code-editor {
     min-height: 400px;
   }
 }
@@ -2461,21 +2445,6 @@ input[type="color"] {
   color: var(--accent);
 }
 
-/* The editor compiles as you type, so it says whether what is in it currently
-   builds — in colour, not words. A compile is about a millisecond, so there is no
-   in-progress state worth drawing: it is either valid or it is telling you why. */
-.code-panel textarea {
-  transition:
-    border-color 0.18s ease,
-    box-shadow 0.18s ease;
-}
-.code-panel textarea.is-invalid {
-  border-color: #7a3350;
-  box-shadow: inset 0 0 0 1px #7a335055;
-}
-.code-panel textarea.is-invalid:focus-visible {
-  outline-color: #b6607f;
-}
 /* The message takes its own space rather than shoving the layout when it appears. */
 .shader-error {
   border-radius: 4px;
@@ -2548,4 +2517,136 @@ input[type="color"] {
 .family-identity button:hover {
   border-color: #7a3350;
   color: #ef9fba;
+}
+
+/* The editor is two layers that must agree on every pixel of metrics, so the shared
+   ones are declared once, here, rather than on each element. */
+.code-editor {
+  display: flex;
+  min-height: 310px;
+  flex: 1;
+  background: #0b0a10;
+  border: 1px solid #30263b;
+  border-radius: 4px;
+  overflow: hidden;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+.code-editor.is-invalid {
+  border-color: #7a3350;
+  box-shadow: inset 0 0 0 1px #7a335055;
+}
+.code-editor:focus-within {
+  border-color: #4a3c5c;
+}
+.code-editor.is-invalid:focus-within {
+  border-color: #9c4467;
+}
+.code-editor .code-back,
+.code-editor .code-front,
+.code-editor .code-gutter {
+  font:
+    10px/1.7 ui-monospace,
+    monospace;
+  padding: 12px 0;
+  margin: 0;
+  border: 0;
+  tab-size: 2;
+}
+.code-gutter {
+  display: flex;
+  flex-direction: column;
+  padding-left: 10px;
+  padding-right: 8px;
+  text-align: right;
+  color: #3f3850;
+  user-select: none;
+  background: #08070c;
+  border-right: 1px solid #221c2c;
+  overflow: hidden;
+}
+.code-gutter .at-error {
+  color: #ef9fba;
+}
+.code-layers {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.code-editor .code-back,
+.code-editor .code-front {
+  position: absolute;
+  inset: 0;
+  padding-left: 10px;
+  padding-right: 10px;
+  white-space: pre;
+  overflow: auto;
+  overflow-wrap: normal;
+}
+.code-editor .code-back {
+  pointer-events: none;
+  color: #cbbcdf;
+}
+.code-editor .code-front {
+  background: none;
+  color: transparent;
+  caret-color: #c2aedf;
+  resize: none;
+  outline: none;
+}
+.code-front::selection {
+  background: #6a53a055;
+}
+/* Only the four distinctions that help: what is a value, what is a name the
+   scaffold gave you, what the language reserves, and what is a note to yourself. */
+/* The back layer ignores the pointer so clicks reach the textarea above it, but that
+   also hides it from elementsFromPoint — and the number spans are exactly what the
+   scrub needs to hit-test against. They are still under the textarea, so re-enabling
+   this changes what a hit test can see, not where a click lands. */
+.t-num {
+  color: #e0b088;
+}
+.code-editor .code-back .t-num {
+  pointer-events: auto;
+}
+/* Holding Alt is the scrub gesture, so the pointer says so for as long as it is
+   held rather than only once it is over a number. */
+.code-editor.is-scrubbable .code-front,
+.code-editor.is-scrubbable .code-back .t-num {
+  cursor: ew-resize;
+}
+.t-uni {
+  color: #82c6bb;
+}
+.t-key,
+.t-pre {
+  color: #b49ae0;
+}
+.t-type {
+  color: #8fa6df;
+}
+.t-fn {
+  color: #d3c9e6;
+}
+.t-comment {
+  color: #5d5570;
+  font-style: italic;
+}
+.t-decl {
+  color: #7fae94;
+  font-style: normal;
+}
+.t-punc,
+.t-id {
+  color: #cbbcdf;
+}
+.code-back .on-error {
+  background: #5c294433;
+}
+/* While scrubbing, the pointer means one thing everywhere. */
+body.is-scrubbing,
+body.is-scrubbing * {
+  cursor: ew-resize !important;
+  user-select: none !important;
 }

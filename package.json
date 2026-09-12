@@ -7,7 +7,7 @@
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "test": "node --test src/project.test.js src/objects/geometry.test.js src/gpuTimer.test.js src/shaders.test.js"
+    "test": "node --test src/project.test.js src/objects/geometry.test.js src/gpuTimer.test.js src/shaders.test.js src/studio/glsl.test.js"
   },
   "dependencies": {
     "react": "19.2.8",

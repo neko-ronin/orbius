@@ -19,6 +19,7 @@ import { createRoot } from "react-dom/client";
 import Icon from "./Icons.jsx";
 import NodeEditor from "./NodeEditor.jsx";
 import Control from "./studio/Control.jsx";
+import CodeEditor from "./studio/CodeEditor.jsx";
 import {
   parseControls,
   resolveFamilies,
@@ -239,6 +240,10 @@ function App() {
     editing && stats.familyError?.id === editing.id
       ? authorMessage(stats.familyError.message, sourceOffset(editing))
       : null;
+  const errorLine = (message) => {
+    const m = /^Line (\d+)/.exec(message || "");
+    return m ? +m[1] : null;
+  };
   const workspaces = useRef({});
   const tipTimer = useRef();
   // Every panel opens the same field-note card, so the handlers live once here and
@@ -1468,14 +1473,13 @@ function App() {
                         {contracts[editing.kind].note} Declare a slider with{" "}
                         <code>// @control name min max step "note"</code>.
                       </p>
-                      <textarea
-                        className={familyError ? "is-invalid" : ""}
-                        spellCheck="false"
-                        aria-label="Family GLSL source"
+                      <CodeEditor
+                        label="Family GLSL source"
                         value={editing.glsl}
                         maxLength={MAX_GLSL}
-                        onChange={(e) => {
-                          const glsl = e.target.value;
+                        invalid={!!familyError}
+                        errorLine={errorLine(familyError)}
+                        onChange={(glsl) => {
                           setFamilies((list) =>
                             list.map((f) =>
                               f.id === editing.id ? { ...f, glsl } : f,
@@ -1506,14 +1510,14 @@ function App() {
                         <code>pigment(p, n)</code>. Geometry, normals, shadows,
                         and reflections share your surface.
                       </p>
-                      <textarea
-                        className={shaderError ? "is-invalid" : ""}
-                        spellCheck="false"
-                        aria-label="GLSL shader source"
+                      <CodeEditor
+                        label="GLSL shader source"
                         value={shader}
                         maxLength={20000}
-                        onChange={(e) => {
-                          setShader(e.target.value);
+                        invalid={!!shaderError}
+                        errorLine={errorLine(shaderError)}
+                        onChange={(next) => {
+                          setShader(next);
                           setDirty(true);
                         }}
                       />
