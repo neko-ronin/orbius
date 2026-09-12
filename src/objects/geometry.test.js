@@ -4,7 +4,7 @@ import {
   layerDefaults,
   validateLayers,
 } from "./layers.js";
-import { primitiveMesh } from "./primitives.js";
+import { primitiveMesh, isFaceted, orbForms, WALL } from "./primitives.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -12,6 +12,7 @@ import {
   meshInfo,
   surfacePoints,
   volumePoints,
+  smoothNormals,
 } from "./geometry.js";
 import { newObject, validateObjects, objectOptics } from "./model.js";
 import {
@@ -240,4 +241,104 @@ test("terrain motion intervals retain both endpoints inside the mesh and persist
     0.1,
   );
   assert.throws(() => validateObjects([{ ...object, pointLimits: [1, 0] }]));
+});
+
+// Every form has to be a closed, outward-facing solid or the glass has nothing to
+// measure its own thickness against, and filled dots refuse the mesh outright.
+test("every orb form is a closed outward-facing solid on the unit sphere", () => {
+  for (const [form] of orbForms) {
+    const mesh = primitiveMesh("orb", { form, detail: 2 });
+    const info = meshInfo(mesh);
+    assert.equal(info.closed, true, `${form} is not closed`);
+    assert.equal(info.boundaryEdges, 0, `${form} has open edges`);
+    for (let i = 0; i < mesh.length; i += 9) {
+      const a = [...mesh.slice(i, i + 3)];
+      const u = [...mesh.slice(i + 3, i + 6)].map((v, k) => v - a[k]),
+        v = [...mesh.slice(i + 6, i + 9)].map((n, k) => n - a[k]);
+      const normal = [
+        u[1] * v[2] - u[2] * v[1],
+        u[2] * v[0] - u[0] * v[2],
+        u[0] * v[1] - u[1] * v[0],
+      ];
+      assert.ok(
+        normal.reduce((sum, n, k) => sum + n * a[k], 0) > 0,
+        `${form} has an inward-facing triangle`,
+      );
+    }
+    // Circumradius one: switching form changes the shape and not the size.
+    let far = 0;
+    for (let i = 0; i < mesh.length; i += 3)
+      far = Math.max(far, Math.hypot(mesh[i], mesh[i + 1], mesh[i + 2]));
+    assert.ok(Math.abs(far - 1) < 1e-6, `${form} is not on the unit sphere`);
+  }
+  // A dodecahedron is twelve pentagons: sixty triangles fanned from twelve centres.
+  assert.equal(primitiveMesh("orb", { form: "dodecahedron" }).length / 9, 60);
+  // Geodesic detail is a square law, on twenty faces.
+  for (const detail of [1, 2, 3, 4])
+    assert.equal(
+      primitiveMesh("orb", { form: "geodesic", detail }).length / 9,
+      20 * detail * detail,
+    );
+});
+
+test("a hollow form encloses a cavity that still fills with dots", () => {
+  const wall = 0.2;
+  const solid = primitiveMesh("orb", { form: "smooth" });
+  const mesh = primitiveMesh("orb", { form: "smooth", hollow: true, wall });
+  assert.equal(mesh.length, solid.length * 2, "the wall is the surface twice");
+  assert.equal(meshInfo(mesh).closed, true);
+  // The inner surface faces into the cavity, which is what lets the glass shader
+  // measure the wall rather than the whole ball.
+  let inward = 0;
+  for (let i = solid.length; i < mesh.length; i += 9) {
+    const a = [...mesh.slice(i, i + 3)];
+    const u = [...mesh.slice(i + 3, i + 6)].map((v, k) => v - a[k]),
+      v = [...mesh.slice(i + 6, i + 9)].map((n, k) => n - a[k]);
+    const normal = [
+      u[1] * v[2] - u[2] * v[1],
+      u[2] * v[0] - u[0] * v[2],
+      u[0] * v[1] - u[1] * v[0],
+    ];
+    if (normal.reduce((sum, n, k) => sum + n * a[k], 0) < 0) inward++;
+  }
+  assert.equal(inward, solid.length / 9, "the inner surface is not reversed");
+
+  // Alternate crossings fill the wall and leave the cavity empty; asking for the
+  // space the vessel encloses fills the whole interior, which is what pouring a
+  // simulation into a shell has always meant.
+  const middle = (points) => {
+    let count = 0;
+    for (let i = 0; i < points.length; i += 3)
+      if (Math.hypot(points[i], points[i + 1], points[i + 2]) < 0.6) count++;
+    return count;
+  };
+  assert.equal(middle(volumePoints(mesh, 24)), 0);
+  assert.ok(middle(volumePoints(mesh, 24, true)) > 100);
+  assert.ok(WALL[0] <= wall && wall <= WALL[1]);
+});
+
+test("faceted shading gives every triangle its own normal", () => {
+  assert.equal(isFaceted("orb", { form: "dodecahedron" }), true);
+  assert.equal(isFaceted("orb", { form: "smooth" }), false);
+  assert.equal(isFaceted("cylinder", { sides: 5 }), true);
+  assert.equal(isFaceted("cylinder", { sides: 64 }), false);
+  const mesh = primitiveMesh("orb", { form: "cube" });
+  const flat = smoothNormals(mesh, true),
+    smooth = smoothNormals(mesh);
+  for (let i = 0; i < mesh.length; i += 9) {
+    const n = [...flat.slice(i, i + 3)];
+    assert.ok(Math.abs(Math.hypot(...n) - 1) < 1e-6);
+    // All three corners of a face share it, which is what makes the face flat.
+    for (const k of [3, 6])
+      n.forEach((v, axis) =>
+        assert.ok(Math.abs(v - flat[i + k + axis]) < 1e-6),
+      );
+  }
+  // Averaged across a ninety-degree corner, a cube's normals point at its corners
+  // instead of its faces — which is the blob the flag exists to avoid. The first
+  // vertex of each triangle is the face centre, shared with nothing; the second is
+  // a real corner of the cube, shared with two other faces.
+  assert.ok(
+    [...smooth.slice(3, 6)].some((v, k) => Math.abs(v - flat[3 + k]) > 0.3),
+  );
 });

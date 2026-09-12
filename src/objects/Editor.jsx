@@ -3,6 +3,14 @@ import Control from "../studio/Control.jsx";
 import { listProjects, readProject } from "../studio/storage.js";
 import { newFamily, validateFamilies } from "../materials/families.js";
 import { layerDefaults } from "./layers.js";
+import {
+  primitiveDefaults,
+  orbForms,
+  isFaceted,
+  SIDES,
+  DETAIL,
+  WALL,
+} from "./primitives.js";
 import React, { useEffect, useRef, useState } from "react";
 import {
   newObject,
@@ -17,6 +25,34 @@ import {
   simulationKeys,
   conformSimulation,
 } from "../project.js";
+// Field notes for the shape of the next primitive, in the same shape every other
+// panel uses: [label, min, max, step, note, search terms].
+const shapeControls = {
+  sides: [
+    "Cylinder sides",
+    SIDES[0],
+    SIDES[1],
+    1,
+    "How many flat faces go around a cylinder. Five is a pentagonal vessel, eight reads as cut crystal, and anything past about twenty-four is round enough that the facets stop being visible. Below twenty-four the faces are shaded as faces rather than smoothed into each other.",
+    "cylinder segments facets prism sides",
+  ],
+  detail: [
+    "Geodesic detail",
+    DETAIL[0],
+    DETAIL[1],
+    1,
+    "How many times each triangle of the icosahedron is divided before being pushed out to the sphere. One is the icosahedron itself, twenty faces; four is a finely faceted ball. Every facet stays roughly the same size and there are no poles, which is what separates this from a globe.",
+    "geodesic icosahedron subdivision sphere facets",
+  ],
+  wall: [
+    "Wall thickness",
+    WALL[0],
+    WALL[1],
+    0.01,
+    "How thick the wall of a hollow form is, as a fraction of its radius. The glass measures its own thickness at each pixel, so a thin wall reads as a vessel and a thick one closes back towards a solid.",
+    "hollow wall thickness vessel shell glass",
+  ],
+};
 // Coordinated optical settings; each is a whole finish, not one slider.
 const glassFinishes = [
   [
@@ -96,6 +132,11 @@ export default function ObjectEditor({
     worker = useRef();
   const [busy, setBusy] = useState(false),
     [message, setMessage] = useState("");
+  // How the next primitive gets built. Deliberately not stored on the object: the
+  // mesh is baked at creation, so these are the settings for the next one you add,
+  // not a description of one already in the scene.
+  const [shape, setShape] = useState(primitiveDefaults);
+  const shapeField = (key, value) => setShape((s) => ({ ...s, [key]: value }));
   useEffect(() => () => worker.current?.terminate(), []);
   useEffect(() => {
     if (worker.current) {
@@ -143,12 +184,11 @@ export default function ObjectEditor({
     w.postMessage(data, data.buffer ? [data.buffer] : []);
   }
   function addObject(name, result) {
-    const object = newObject(
-      name,
-      result.triangles,
-      result.points,
-      result.info,
-    );
+    const object = {
+      ...newObject(name, result.triangles, result.points, result.info),
+      faceted: result.faceted === true,
+      hollow: result.hollow === true,
+    };
     try {
       const next = [...objects, object];
       validateObjects(next);
@@ -161,8 +201,17 @@ export default function ObjectEditor({
   }
   function addPrimitive(kind) {
     if (busy || objects.length >= MAX_OBJECTS) return;
-    process({ primitive: kind }, (result) =>
-      addObject(`Glass ${kind}`, result),
+    const options = { ...shape };
+    const name =
+      kind === "orb" && options.form !== "smooth"
+        ? orbForms.find(([id]) => id === options.form)[1]
+        : `Glass ${kind}`;
+    process({ primitive: kind, options }, (result) =>
+      addObject(name, {
+        ...result,
+        faceted: isFaceted(kind, options),
+        hollow: options.hollow,
+      }),
     );
   }
   async function importFile(e) {
@@ -194,6 +243,7 @@ export default function ObjectEditor({
         triangles: shell.triangles,
         role: "layers",
         layerSettings: layerDefaults,
+        solid: shell.hollow,
       },
       (result) => {
         const layer = {
@@ -242,22 +292,27 @@ export default function ObjectEditor({
     }
     if (doc.mode === "particles") {
       const id = current.id;
-      process({ triangles: current.triangles, role: "field" }, (result) => {
-        const conformed = conformSimulation(
-          doc.config,
-          result.interior,
-          current.scale,
-        );
-        onSimulation({
-          container: id,
-          field: result.field,
-          resolution: result.resolution,
-          config: Object.fromEntries(
-            simulationKeys.map((key) => [key, conformed[key]]),
-          ),
-        });
-        notify(`${doc.name} is running inside ${current.name}, fitted to it.`);
-      });
+      process(
+        { triangles: current.triangles, role: "field", solid: current.hollow },
+        (result) => {
+          const conformed = conformSimulation(
+            doc.config,
+            result.interior,
+            current.scale,
+          );
+          onSimulation({
+            container: id,
+            field: result.field,
+            resolution: result.resolution,
+            config: Object.fromEntries(
+              simulationKeys.map((key) => [key, conformed[key]]),
+            ),
+          });
+          notify(
+            `${doc.name} is running inside ${current.name}, fitted to it.`,
+          );
+        },
+      );
       return;
     }
     if (doc.mode === "orb") {
@@ -363,22 +418,25 @@ export default function ObjectEditor({
       return;
     }
     const id = current.id;
-    process({ triangles: current.triangles, role: next }, (result) => {
-      replaceGeometry(
-        objects.map((o) =>
-          o.id === id
-            ? {
-                ...o,
-                role: next,
-                pointLimits: undefined,
-                points: Array.from(result.points),
-                info: result.info,
-                opacity: next === "volume" ? 0.5 : 0.6,
-              }
-            : o,
-        ),
-      );
-    });
+    process(
+      { triangles: current.triangles, role: next, solid: current.hollow },
+      (result) => {
+        replaceGeometry(
+          objects.map((o) =>
+            o.id === id
+              ? {
+                  ...o,
+                  role: next,
+                  pointLimits: undefined,
+                  points: Array.from(result.points),
+                  info: result.info,
+                  opacity: next === "volume" ? 0.5 : 0.6,
+                }
+              : o,
+          ),
+        );
+      },
+    );
   }
   function duplicate() {
     if (!current || objects.length >= MAX_OBJECTS) return;
@@ -434,6 +492,59 @@ export default function ObjectEditor({
         >
           + Glass cylinder
         </button>
+      </div>
+      <div className="shape-options">
+        <label>
+          <span>Orb form</span>
+          <select
+            aria-label="Orb form"
+            value={shape.form}
+            onChange={(e) => shapeField("form", e.target.value)}
+          >
+            {orbForms.map(([id, label]) => (
+              <option key={id} value={id}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {shape.form === "geodesic" && (
+          <Control
+            id="geodesicDetail"
+            entry={shapeControls.detail}
+            value={shape.detail}
+            onChange={(v) => shapeField("detail", v)}
+            tip={tip}
+          />
+        )}
+        <Control
+          id="cylinderSides"
+          entry={shapeControls.sides}
+          value={shape.sides}
+          onChange={(v) => shapeField("sides", v)}
+          tip={tip}
+        />
+        <label className="shape-hollow">
+          <input
+            type="checkbox"
+            checked={shape.hollow}
+            onChange={(e) => shapeField("hollow", e.target.checked)}
+          />
+          <span>Hollow</span>
+        </label>
+        {shape.hollow && (
+          <Control
+            id="wallThickness"
+            entry={shapeControls.wall}
+            value={shape.wall}
+            onChange={(v) => shapeField("wall", v)}
+            tip={tip}
+          />
+        )}
+        <p className="mesh-formats">
+          These build the next form you add. The mesh is baked when it is added,
+          so an object already in the scene keeps the shape it was made with.
+        </p>
       </div>
       <button
         className="primary-button"

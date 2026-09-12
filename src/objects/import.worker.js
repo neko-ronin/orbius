@@ -10,12 +10,16 @@ import {
 self.onmessage = ({ data }) => {
   try {
     const triangles = data.primitive
-      ? primitiveMesh(data.primitive)
+      ? primitiveMesh(data.primitive, data.options)
       : data.triangles
         ? Float32Array.from(data.triangles)
         : parseMesh(data.buffer, data.name);
     if (data.role === "field") {
-      const { field, resolution, interior } = volumeField(triangles);
+      const { field, resolution, interior } = volumeField(
+        triangles,
+        undefined,
+        data.solid,
+      );
       self.postMessage({ field, resolution, interior }, [field.buffer]);
       return;
     }
@@ -27,7 +31,7 @@ self.onmessage = ({ data }) => {
     const points = layer
       ? layer.points
       : data.role === "volume"
-        ? volumePoints(triangles)
+        ? volumePoints(triangles, 48, data.solid)
         : surfacePoints(triangles);
     self.postMessage({ triangles, points, info, limits: layer?.limits }, [
       triangles.buffer,

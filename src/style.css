@@ -2345,6 +2345,37 @@ input[type="color"] {
   gap: 8px;
   margin-top: 16px;
 }
+.shape-options {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 14px;
+  padding: 12px;
+  border: 1px solid #2a2434;
+  border-radius: 8px;
+  background: #17141d;
+}
+.shape-options label > span {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #8d84a0;
+}
+.shape-options select {
+  width: 100%;
+}
+.shape-hollow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.shape-hollow > span {
+  margin: 0;
+}
+.shape-hollow input {
+  width: auto;
+}
 .primitive-actions button {
   padding: 11px 6px;
   font-size: 11px;

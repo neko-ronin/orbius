@@ -253,12 +253,13 @@ export class ObjectRenderer {
       if (
         previous?.triangles === object.triangles &&
         previous?.points === object.points &&
-        previous?.pointLimits === object.pointLimits
+        previous?.pointLimits === object.pointLimits &&
+        previous?.faceted === object.faceted
       )
         continue;
       if (previous) this.deleteResource(previous);
       const mesh = Float32Array.from(object.triangles),
-        normals = smoothNormals(mesh),
+        normals = smoothNormals(mesh, object.faceted),
         points = Float32Array.from(object.points);
       const limits = object.pointLimits
         ? new Float32Array(points.length)
@@ -298,6 +299,7 @@ export class ObjectRenderer {
         triangles: object.triangles,
         points: object.points,
         pointLimits: object.pointLimits,
+        faceted: object.faceted,
         vaos,
         buffers,
         meshCount: mesh.length / 3,

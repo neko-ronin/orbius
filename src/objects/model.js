@@ -275,6 +275,17 @@ export function validateObjects(objects) {
         },
       };
     }
+    // Two facts about how this object was generated, decided once when it was
+    // added and needed for as long as it exists: whether its facets are shaded as
+    // facets, and whether it is a wall around a cavity rather than a solid.
+    for (const flag of ["faceted", "hollow"])
+      if (o[flag] !== undefined && typeof o[flag] !== "boolean")
+        throw Error(`Invalid object ${flag}.`);
+    o = {
+      ...o,
+      faceted: o.faceted === true,
+      hollow: o.hollow === true,
+    };
     if (o.pointLimits !== undefined) {
       if (
         !Array.isArray(o.pointLimits) ||

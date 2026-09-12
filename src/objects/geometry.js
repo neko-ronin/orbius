@@ -252,8 +252,16 @@ export function meshColumns(triangles, resolution = 48, offsets = null) {
       .filter((x, i, a) => i === 0 || x - a[i - 1] > 1e-5),
   );
 }
-export function volumePoints(triangles, resolution = 48) {
-  const columns = meshColumns(triangles, resolution),
+// A hollow vessel crosses its own wall twice on the way in, so filling between
+// alternate crossings puts points in the wall and leaves the cavity empty. `solid`
+// fills from the first crossing to the last instead, which is the space the vessel
+// encloses — what "pour this into that shell" has always meant.
+const filled = (xs, solid) =>
+  solid && xs.length > 2 ? [xs[0], xs[xs.length - 1]] : xs;
+export function volumePoints(triangles, resolution = 48, solid = false) {
+  const columns = meshColumns(triangles, resolution).map((xs) =>
+      filled(xs, solid),
+    ),
     step = 2 / resolution;
   const points = [];
   for (let y = 0; y < resolution; y++)
@@ -281,7 +289,27 @@ export function volumePoints(triangles, resolution = 48) {
     );
   return Float32Array.from(points);
 }
-export function smoothNormals(triangles) {
+// `faceted` shades each triangle by its own normal instead of averaging across the
+// corners it shares. Averaging is what makes 64 lathe segments read as round, and it
+// is the same averaging that turns a pentagon into a soft blob, so the shape's
+// generator decides which it wants and the answer travels with the object.
+export function smoothNormals(triangles, faceted = false) {
+  if (faceted) {
+    const out = new Float32Array(triangles.length);
+    for (let i = 0; i < triangles.length; i += 9) {
+      const v = [0, 3, 6].map((k) =>
+        Array.from(triangles.slice(i + k, i + k + 3)),
+      );
+      const n = cross(sub(v[1], v[0]), sub(v[2], v[0]));
+      const length = Math.hypot(...n) || 1;
+      for (let k = 0; k < 3; k++)
+        out.set(
+          n.map((x) => x / length),
+          i + k * 3,
+        );
+    }
+    return out;
+  }
   const sums = new Map(),
     keys = [];
   for (let i = 0; i < triangles.length; i += 9) {
@@ -314,8 +342,14 @@ export const VOLUME_RESOLUTION = 64;
 // Occupancy of the mesh interior on a cube grid, for confining a live particle
 // simulation. Softened by one box-blur pass so the gradient near the wall has a
 // direction to push along instead of a binary step.
-export function volumeField(triangles, resolution = VOLUME_RESOLUTION) {
-  const columns = meshColumns(triangles, resolution),
+export function volumeField(
+  triangles,
+  resolution = VOLUME_RESOLUTION,
+  hollow = false,
+) {
+  const columns = meshColumns(triangles, resolution).map((xs) =>
+      filled(xs, hollow),
+    ),
     step = 2 / resolution,
     size = resolution ** 3,
     solid = new Uint8Array(size);

@@ -4,7 +4,7 @@
 
 Glass Objects now starts with an empty composition. The procedural human bust, skeletal scaffold, and Phosphor anatomy preset have been removed. Object geometry comes from basic forms or local mesh files; materials are independent treatments of that geometry. See [the current direction and reference analysis](MATERIAL_DIRECTION.md) for procedural strata, optics, and shader-family authoring.
 
-Add a built-in **Glass orb** or **Glass cylinder**, or import an OBJ or STL mesh, then choose **Glass container**, **Surface dots**, or **Filled volume dots**. Import another mesh or duplicate an existing object. Each object has independent position, rotation, scale, visibility, color, and material controls. Removal can be undone. The scene supports eight objects.
+Add a built-in **Glass orb** or **Glass cylinder** — in one of six forms, with any number of sides from five, optionally hollow with a wall thickness — or import an OBJ or STL mesh, then choose **Glass container**, **Surface dots**, or **Filled volume dots**. Import another mesh or duplicate an existing object. Each object has independent position, rotation, scale, visibility, color, and material controls. Removal can be undone. The scene supports eight objects.
 
 Surface dots use deterministic area-weighted sampling over triangles. Filled-volume dots use odd/even triangle intersections to fill a grid inside the mesh; this requires a closed manifold surface. Open meshes can use glass or surface dots. Intersecting or degenerate shells may need repair in a modeler. Files are centered and uniformly fitted independently on import; use the object transforms to align separately exported parts.
 
@@ -117,3 +117,11 @@ Browser checks imported two separate OBJ fixtures, retained the first as glass, 
 No runtime dependency was added. The importer does not fetch external OBJ material references or execute file content.
 
 Basic forms are closed triangle meshes generated in `src/objects/primitives.js`. They share the imported-object material, transform, dot sampling, duplication, and save/load paths. The cylinder has softly rounded rims.
+
+Two generators live there. A **lathe** spins a 2D profile around Y — the smooth orb and every cylinder — and a **polyhedron** table is triangulated directly, which is the only way to get a solid whose faces are not all the same kind: a dodecahedron is twelve pentagons and no lathe will produce one. It is built as the dual of the icosahedron rather than from a typed table of golden-ratio vertices, so its winding and face order cannot be quietly wrong. **Geodesic** subdivides each icosahedral face and pushes the result out to the sphere, giving near-equal facets and no poles. Every form is normalised to a circumradius of one, so changing form changes the shape and not the size.
+
+**Cylinder sides** runs 5–64. Below 24 the faces are shaded as faces rather than averaged into each other; averaging is what makes 64 segments read as round, and the same averaging turns a pentagon into a soft blob. The generator decides which it wants and stores the answer on the object as `faceted`.
+
+**Hollow** builds the same surface twice: the outer one, and a shrunken copy wound the other way so its normals point into the cavity. Nothing in the glass shader changes — it already measures optical thickness to the nearest back-facing surface, which for a ray entering a vessel is the far side of the wall, so a hollow form reads as a wall rather than as a solid. What did have to change is every question about the *interior*: filled dots, poured particles and strata fill between alternate surface crossings, which on a hollow form fills the wall and leaves the cavity empty. Those paths ask for the space the vessel encloses instead — first crossing to last — which is what pouring something into a shell has always meant.
+
+These are creation-time settings. The mesh is baked when the object is added, so the panel describes the next form you add, not one already in the scene.
