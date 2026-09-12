@@ -85,6 +85,17 @@ Node graphs are a single-input composition chain with reusable branches, not a g
 
 WebGL 2 is required. Float color targets are used when `EXT_color_buffer_float` is available, with an RGBA8 fallback. Performance depends on GPU, output size, particle count, and shader complexity. Context loss displays a recovery message instead of silently continuing with a broken image. Touch layout is supported; desktop is the primary authoring experience. Browser chrome remains browser-controlled in show mode.
 
+## Sources of truth
+
+Start here before changing anything or testing anything. These four are authoritative for this repository; where they and a stray comment disagree, they win.
+
+- **`docs/MATERIAL_DIRECTION.md`** — why the work is the way it is. Every material decision, what was tried, what failed, and what the failure taught. The reference for intent.
+- **`docs/TEST_PLAN.md`** — what must be true. Every workspace, flow, control, limit and UI state as numbered cases, and therefore the closest thing to a feature inventory. Test against this, and add a case when you add behaviour. Its numbers are a snapshot of the code, not the other way round.
+- **`docs/SHADER_WIZARD_RESEARCH.md`** — how in-app authoring was arrived at: the survey of shader tools and live-coding environments behind families-as-values, `@control` annotations, and compile-as-you-type.
+- **`docs/CODE_EDITOR_DEPENDENCY_RESEARCH.md`** — the measured case for building the editor rather than taking CodeMirror or Monaco, including the reversal triggers. Read it before proposing a dependency.
+
+`docs/MATERIAL_STUDIO.md` documents the glass and material workspaces as built. `docs/VALIDATION.md` is the record of what was actually checked and when, by case ID from the test plan; it is a log, never a specification. The bug wiki at `~/Repos/vibes/bugs/` holds the diagnoses — consult it before debugging anything non-trivial, and write an entry after solving one.
+
 ## Source map
 
 - `src/main.jsx`: studio state, inspector, controls, persistence, capture, and keyboard interaction.
@@ -94,4 +105,4 @@ WebGL 2 is required. Float color targets are used when `EXT_color_buffer_float` 
 - `src/NodeEditor.jsx`: node manipulation and connections.
 - `src/style.css`: studio design language, responsive layout, and interaction states.
 
-Validation evidence is summarized in `docs/VALIDATION.md`. Dependency review, provenance, limitations, and advisory sources are in `docs/VET_REPORT.txt`. No commit or push was made during creation.
+Dependency review, provenance, limitations, and advisory sources are in `docs/VET_REPORT.txt`. No commit or push was made during creation.
