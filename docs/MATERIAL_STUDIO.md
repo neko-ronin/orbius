@@ -24,13 +24,26 @@ Supported inputs: OBJ positions/faces, including negative indices and triangulat
 - `src/studio/storage.js`: IndexedDB autosave and collection storage, with legacy localStorage reads.
 - `src/project.js`: portable project validation, including embedded object geometry.
 
-## Contained particle simulations
+## What a shell can hold
 
-Select a glass shell and choose **Load particle simulation** to open a saved
-`.boast.json` particle project. Its solver parameters come across and its
-particles run live inside that shell, as contents the glass refracts alongside any
-dots or strata. One enclosure holds a simulation at a time; **Empty this
-enclosure** releases it.
+Select a glass shell and choose **Load a saved creation**. It lists what is in
+`saves/projects` by name, and what the thing becomes depends on what it was.
+
+A **particle** piece is poured in: its solver parameters come across and the
+particles run live inside that shell, fitted to it, as contents the glass refracts
+alongside any dots or strata. One enclosure holds a simulation at a time; **Empty
+this enclosure** releases it.
+
+An **orb shader** is placed inside the shell as its **Inner shader**, at a size and
+offset you choose. It renders through the enclosure's camera rather than its own, so
+it is refracted and absorbed like anything else in there — Solar cartography at 0.4
+inside a clear orb is a sun under glass. An authored family travels with the piece
+and is added to this project.
+
+Another **glass** composition adds its objects to the scene.
+
+The same choice is available directly as **Inner shader** on any glass object, for a
+family already in the project.
 
 The shell is voxelized into an occupancy grid (64³, one box-blur pass) in the
 import worker. The solver samples that grid in local space each step and pushes
