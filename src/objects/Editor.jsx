@@ -10,6 +10,7 @@ import {
   validateObjects,
   objectOptics,
   objectControls,
+  innerLook,
 } from "./model.js";
 import {
   validateProject,
@@ -87,6 +88,7 @@ export default function ObjectEditor({
   registry,
   families,
   onFamilies,
+  collected = [],
 }) {
   const [saved, setSaved] = useState(null);
   const input = useRef(),
@@ -279,6 +281,10 @@ export default function ObjectEditor({
         family: id,
         scale: current.contents?.scale ?? 0.5,
         offset: current.contents?.offset ?? [0, 0, 0],
+        // The shader alone is not the piece. Its palette, emission, scale and every
+        // declared parameter travel with it, or the shell renders the same family
+        // against this workspace's defaults and the import arrives unfinished.
+        look: innerLook(doc.config, doc.config.params?.[doc.config.family]),
       });
       notify(`${doc.name} is inside ${current.name}.`);
       return;
@@ -530,8 +536,28 @@ export default function ObjectEditor({
                 className="primary-button"
                 disabled={busy}
                 onClick={async () => {
-                  const items = await listProjects().catch(() => null);
-                  if (items?.length) setSaved(items);
+                  // Two stores, one question. A piece put in the collection never
+                  // becomes a file in saves/projects, so listing only the folder hid
+                  // every collected specimen — which is where the particle pieces are.
+                  const files = (await listProjects().catch(() => null)) || [];
+                  const seen = new Set();
+                  const items = [
+                    ...collected.map((s) => ({
+                      key: s.id,
+                      label: s.project.name,
+                      read: async () => s.project,
+                    })),
+                    ...files.map(({ file, label }) => ({
+                      key: file,
+                      label,
+                      read: () => readProject(file),
+                    })),
+                  ].filter(
+                    (i) =>
+                      !seen.has(i.label.toLowerCase()) &&
+                      seen.add(i.label.toLowerCase()),
+                  );
+                  if (items.length) setSaved(items);
                   else simulationInput.current.click();
                 }}
               >
@@ -539,13 +565,13 @@ export default function ObjectEditor({
               </button>
               {saved && (
                 <div className="saved-picker">
-                  {saved.map(({ file, label }) => (
+                  {saved.map(({ key, label, read }) => (
                     <button
-                      key={file}
+                      key={key}
                       onClick={async () => {
                         setSaved(null);
                         try {
-                          await importSaved(await readProject(file), label);
+                          await importSaved(await read(), label);
                         } catch (err) {
                           setMessage(`Could not open ${label}: ${err.message}`);
                         }

@@ -1,4 +1,5 @@
 import { validateLayers, layerDefaults } from "./layers.js";
+import { materialDefaults } from "../materials/catalog.js";
 import { MAX_TRIANGLES, MAX_POINTS } from "./geometry.js";
 export const objectOptics = {
   billow: 0,
@@ -169,6 +170,47 @@ export function newObject(name, triangles, points, info, role = "glass") {
     pointSize: 2,
   };
 }
+// What a family looked like in the workspace it was made in. Without this a shell
+// renders the family against the *glass* workspace's palette, emission and scale —
+// same shader, none of the choices — which is why an imported orb arrived looking
+// unfinished. `family` and `enclosure` are excluded: the first is stored beside
+// this, and the second is decided by the shell, not by the saved scene.
+const LOOK_KEYS = [
+  "palette",
+  "hue",
+  "ior",
+  "reflection",
+  "roughness",
+  ...Object.keys(materialDefaults).filter(
+    (k) => k !== "family" && k !== "enclosure",
+  ),
+];
+export function innerLook(config, params) {
+  const look = { params: {} };
+  for (const key of LOOK_KEYS)
+    if (Number.isFinite(config?.[key])) look[key] = config[key];
+  for (const [name, value] of Object.entries(params || {}))
+    if (Number.isFinite(value)) look.params[name] = value;
+  return look;
+}
+function validateLook(look) {
+  if (look === undefined || look === null) return undefined;
+  if (typeof look !== "object") throw Error("Invalid shell contents.");
+  const clean = { params: {} };
+  for (const key of LOOK_KEYS)
+    if (look[key] !== undefined) {
+      if (!Number.isFinite(look[key]) || Math.abs(look[key]) > 1e4)
+        throw Error(`Invalid inner ${key}.`);
+      clean[key] = look[key];
+    }
+  const params = Object.entries(look.params || {}).slice(0, 64);
+  for (const [name, value] of params) {
+    if (!/^\w{1,40}$/.test(name) || !Number.isFinite(value))
+      throw Error("Invalid inner parameter.");
+    clean.params[name] = value;
+  }
+  return clean;
+}
 export function validateObjects(objects) {
   if (objects === undefined) return [];
   if (!Array.isArray(objects) || objects.length > MAX_OBJECTS)
@@ -210,6 +252,7 @@ export function validateObjects(objects) {
     // this workspace's camera and then refracted like any other contents.
     if (o.contents !== undefined && o.contents !== null) {
       const c = o.contents;
+      const look = validateLook(c.look);
       if (
         typeof c !== "object" ||
         typeof c.family !== "string" ||
@@ -224,7 +267,12 @@ export function validateObjects(objects) {
         throw Error("Invalid shell contents.");
       o = {
         ...o,
-        contents: { family: c.family, scale: c.scale, offset: [...c.offset] },
+        contents: {
+          family: c.family,
+          scale: c.scale,
+          offset: [...c.offset],
+          ...(look ? { look } : {}),
+        },
       };
     }
     if (o.pointLimits !== undefined) {

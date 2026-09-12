@@ -1296,6 +1296,7 @@ function App() {
                     tip={tip}
                     registry={registry}
                     families={families}
+                    collected={saved}
                     onFamilies={(next) => {
                       setFamilies(next);
                       setDirty(true);

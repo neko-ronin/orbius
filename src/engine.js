@@ -576,8 +576,15 @@ export class Engine {
     } else if (this.mode === "glass") {
       // A shell holding Solar cartography needs its field stepped here too, or the
       // pattern it samples is frozen at whatever the last orb frame left.
-      if ((this.objects || []).some((o) => o.contents?.family === "solar"))
-        this.chemistry.advance(dt, c.reactionFeed, c.reactionKill);
+      const star = (this.objects || []).find(
+        (o) => o.contents?.family === "solar",
+      );
+      if (star)
+        this.chemistry.advance(
+          dt,
+          star.contents.look?.reactionFeed ?? c.reactionFeed,
+          star.contents.look?.reactionKill ?? c.reactionKill,
+        );
       const held = this.contained();
       if (held) simulate();
       // Rendering a family inside a shell: the same program the orb workspace uses,
@@ -587,12 +594,30 @@ export class Engine {
         if (!family) return;
         const program = this.familyProgram(family);
         if (!program) return;
+        // How the family looked where it was made, when it was imported from a save.
+        // Falling back to this workspace's own material settings is what a family
+        // chosen from the dropdown gets, since there is no other scene to inherit.
+        const look = contents.look || {};
+        const of = (key) => look[key] ?? c[key];
+        const inner =
+          look.palette === undefined
+            ? shared
+            : {
+                ...shared,
+                ...Object.fromEntries(
+                  ["uColorA", "uColorB", "uColorC"].map((n, i) => [
+                    n,
+                    rgb(palettes[look.palette].colors[i]),
+                  ]),
+                ),
+                uHue: of("hue"),
+              };
         this.set(program, {
-          ...shared,
+          ...inner,
           uResolution: [w, h],
-          uIor: c.ior,
-          uReflection: c.reflection,
-          uRoughness: c.roughness,
+          uIor: of("ior"),
+          uReflection: of("reflection"),
+          uRoughness: of("roughness"),
           uContained: 1,
           // The shell around a contained family is the glass object holding it.
           // Drawing its own bounding sphere too would put a second ball inside.
@@ -606,12 +631,12 @@ export class Engine {
           this.uniform(
             program,
             "u" + key[0].toUpperCase() + key.slice(1),
-            c[key],
+            of(key),
             ["container", "interior"].includes(key) ? "int" : undefined,
           );
         }
         const declared = parseControls(family.glsl);
-        const chosen = c.params?.[family.id] ?? {};
+        const chosen = look.params ?? c.params?.[family.id] ?? {};
         for (const [name, fallback] of Object.entries(declared.defaults))
           this.uniform(program, uniformName(name), chosen[name] ?? fallback);
         this.uniform(program, "uChemistry", 1, "int");
@@ -680,7 +705,7 @@ export class Engine {
         // Whatever this family declared for itself, from the project or its own
         // default. Nothing here knows the names; the shader is the only source.
         const declared = parseControls(family.glsl);
-        const chosen = c.params?.[family.id] ?? {};
+        const chosen = look.params ?? c.params?.[family.id] ?? {};
         for (const [name, fallback] of Object.entries(declared.defaults))
           this.uniform(material, uniformName(name), chosen[name] ?? fallback);
         this.uniform(material, "uChemistry", 1, "int");

@@ -11,7 +11,7 @@ import {
   lightRig,
   lightRoles,
 } from "./project.js";
-import { newObject } from "./objects/model.js";
+import { newObject, innerLook } from "./objects/model.js";
 import { newFamily, builtins } from "./materials/families.js";
 const fixture = () => ({
   format: "boast-project",
@@ -451,6 +451,45 @@ test("a shell can hold a family, placed, and loses the reference if the family i
     { ...shell, contents: { ...shell.contents, family: "solar" } },
   ];
   assert.equal(validateProject(builtin).objects[0].contents.family, "solar");
+
+  // The look travels with it. Without this a shell renders an imported family
+  // against the glass workspace's own palette and scale, which is the same shader
+  // with none of the choices that made the piece.
+  const dressed = fixture();
+  dressed.mode = "glass";
+  dressed.families = [mine];
+  dressed.objects = [
+    {
+      ...shell,
+      contents: {
+        ...shell.contents,
+        look: innerLook(
+          { palette: 3, hue: 0.2, emission: 2.4, materialScale: 5, junk: 9 },
+          { corona: 0.8 },
+        ),
+      },
+    },
+  ];
+  const kept = validateProject(JSON.parse(JSON.stringify(dressed))).objects[0]
+    .contents.look;
+  assert.equal(kept.palette, 3);
+  assert.equal(kept.emission, 2.4);
+  assert.equal(kept.params.corona, 0.8);
+  assert.equal("junk" in kept, false, "an unknown key is not carried");
+  for (const bad of [
+    { look: { palette: Number.NaN } },
+    { look: { emission: 1e9 } },
+    { look: { params: { "bad name": 1 } } },
+    { look: { params: { corona: "1" } } },
+  ])
+    assert.throws(
+      () =>
+        validateProject({
+          ...dressed,
+          objects: [{ ...shell, contents: { ...shell.contents, ...bad } }],
+        }),
+      `accepted ${JSON.stringify(bad)}`,
+    );
 
   // The family is gone: keep the object, drop the reference.
   const orphaned = fixture();

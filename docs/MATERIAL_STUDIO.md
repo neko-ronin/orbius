@@ -38,9 +38,17 @@ An **orb shader** is placed inside the shell as its **Inner shader**, at a size 
 offset you choose. It renders through the enclosure's camera rather than its own, so
 it is refracted and absorbed like anything else in there — Solar cartography at 0.4
 inside a clear orb is a sun under glass. An authored family travels with the piece
-and is added to this project.
+and is added to this project, and so does the look it was saved with — palette, hue,
+emission, scale and every declared parameter — or the shell would render the same
+shader against this workspace's own defaults and the import would arrive unfinished.
+Choosing a family from the **Inner shader** dropdown instead inherits this
+workspace, since there is no other scene for it to have come from.
 
 Another **glass** composition adds its objects to the scene.
+
+The picker lists both places a piece can live: everything in your collection, and
+every project file in `saves/projects`. Collecting something never writes a project
+file, so listing only the folder hid every collected specimen.
 
 The same choice is available directly as **Inner shader** on any glass object, for a
 family already in the project.
