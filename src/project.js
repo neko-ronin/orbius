@@ -1008,8 +1008,16 @@ export function validateProject(data) {
     )
       throw Error("Invalid field.");
     else fieldIds.add(f.id);
-  const objects =
-    data.objects !== undefined ? validateObjects(data.objects) : [];
+  const objects = (
+    data.objects !== undefined ? validateObjects(data.objects) : []
+  ).map((o) =>
+    // A shell may name a family that this document no longer carries — deleted, or
+    // authored somewhere else. Dropping the reference keeps the object; rejecting
+    // the file would lose a whole composition over one stale id.
+    o.contents && !registry[o.contents.family]
+      ? { ...o, contents: undefined }
+      : o,
+  );
   return {
     format: "boast-project",
     version: 1,

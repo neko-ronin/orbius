@@ -426,3 +426,37 @@ test("a project carries the families it authored, and refuses ones it cannot tru
   orphan.config.family = "fdeadbeef";
   assert.throws(() => validateProject(orphan));
 });
+
+test("a shell can hold a family, placed, and loses the reference if the family is gone", () => {
+  const mine = newFamily("volume", "Inner sun");
+  const shell = {
+    ...newObject("Orb", [0, 0, 0, 1, 0, 0, 0, 1, 0], [0, 0, 0], {}),
+    contents: { family: mine.id, scale: 0.42, offset: [0, 0.1, 0] },
+  };
+  const p = fixture();
+  p.mode = "glass";
+  p.families = [mine];
+  p.objects = [shell];
+  const restored = validateProject(JSON.parse(JSON.stringify(p)));
+  assert.deepEqual(restored.objects[0].contents, {
+    family: mine.id,
+    scale: 0.42,
+    offset: [0, 0.1, 0],
+  });
+
+  // Built-ins are always available, so naming one needs no carried family.
+  const builtin = fixture();
+  builtin.mode = "glass";
+  builtin.objects = [
+    { ...shell, contents: { ...shell.contents, family: "solar" } },
+  ];
+  assert.equal(validateProject(builtin).objects[0].contents.family, "solar");
+
+  // The family is gone: keep the object, drop the reference.
+  const orphaned = fixture();
+  orphaned.mode = "glass";
+  orphaned.objects = [shell];
+  const after = validateProject(orphaned);
+  assert.equal(after.objects.length, 1);
+  assert.equal(after.objects[0].contents, undefined);
+});

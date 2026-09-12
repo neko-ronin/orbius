@@ -3,6 +3,7 @@
 // anything else in the tree. IndexedDB stays as the fallback for a built copy, where
 // no dev server exists to write files.
 const API = "/__boast";
+const part = (name) => encodeURIComponent(name);
 let disk;
 async function onDisk() {
   if (disk === undefined)
@@ -16,7 +17,7 @@ async function writeState(key, value) {
     .saved;
 }
 async function call(method, area, name, body) {
-  const r = await fetch(`${API}/${area}${name ? `/${name}` : ""}`, {
+  const r = await fetch(`${API}/${area}${name ? `/${part(name)}` : ""}`, {
     method,
     headers: { "x-boast": "1", "Content-Type": "application/json" },
     body,
@@ -25,10 +26,27 @@ async function call(method, area, name, body) {
     throw Error((await r.json().catch(() => ({}))).error || r.statusText);
   return r.json();
 }
+// A family saved out of the project it was born in, so it can be used in another.
+// Same shape as a project save, a different folder.
+export async function listFamilies() {
+  if (!(await onDisk())) return null;
+  return (await call("GET", "families")).items;
+}
+export async function readFamily(name) {
+  return (await call("GET", "families", name)).data;
+}
+export async function writeFamily(name, value) {
+  if (!(await onDisk())) return null;
+  return (await call("PUT", "families", name, JSON.stringify(value, null, 2)))
+    .saved;
+}
+export async function deleteFamily(name) {
+  if (await onDisk()) await call("DELETE", "families", name);
+}
 // A saved project is a file in saves/projects. These are what the Open dialog lists.
 export async function listProjects() {
   if (!(await onDisk())) return null;
-  return (await call("GET", "projects")).names;
+  return (await call("GET", "projects")).items;
 }
 export async function readProject(name) {
   return (await call("GET", "projects", name)).data;

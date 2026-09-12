@@ -1288,6 +1288,7 @@ function App() {
                     particleContainer={particleContainer}
                     onSimulation={onSimulation}
                     tip={tip}
+                    registry={registry}
                   />
                   <button
                     className="object-undo"
@@ -1633,21 +1634,21 @@ function App() {
             <span className="eyebrow">SAVES / IN THIS REPOSITORY</span>
             <h3>Open a project</h3>
             <ul>
-              {browsing.map((n) => (
-                <li key={n}>
+              {browsing.map(({ file, label }) => (
+                <li key={file}>
                   <button
                     onClick={async () => {
                       try {
-                        const data = await readProject(n);
+                        const data = await readProject(file);
                         setBrowsing(null);
                         apply(data);
                       } catch (e) {
                         setBrowsing(null);
-                        notify(`Could not open ${n}: ${e.message}`);
+                        notify(`Could not open ${label}: ${e.message}`);
                       }
                     }}
                   >
-                    {n}
+                    {label}
                   </button>
                 </li>
               ))}

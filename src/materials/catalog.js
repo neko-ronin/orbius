@@ -7,6 +7,7 @@ export const materialDefaults = {
   family: "",
   container: 0,
   interior: 0,
+  enclosure: 1,
   glassClarity: 0.92,
   glassThickness: 0.14,
   glassTint: 0.25,
@@ -23,6 +24,14 @@ export const materialDefaults = {
 };
 export const materialControls = {
   ...composerControls,
+  enclosure: [
+    "Enclosure",
+    0,
+    1,
+    0.01,
+    "How visible the sphere holding a volume is. At zero the bounding shell stops reflecting anything and only the volume inside it is drawn, which is what you want for something that is meant to be a body of light rather than an object in glass.",
+    "volumetric bounding shell reflection",
+  ],
   containerWidth: [
     "Container width",
     0.5,
@@ -158,7 +167,10 @@ export const materialSections = {
         "reactionKill",
       ],
     ],
-    ["Light & finish", ["roughness", "reflection", "bloom", "exposure", "hue"]],
+    [
+      "Light & finish",
+      ["enclosure", "roughness", "reflection", "bloom", "exposure", "hue"],
+    ],
     ["Camera", ["zoom", "tilt", "rotation", "autoRotate"]],
     ["Render quality", ["devScale", "showScale"]],
   ],

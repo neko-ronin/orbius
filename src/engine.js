@@ -560,8 +560,52 @@ export class Engine {
         this.previousConfig = c;
       }
     } else if (this.mode === "glass") {
+      // A shell holding Solar cartography needs its field stepped here too, or the
+      // pattern it samples is frozen at whatever the last orb frame left.
+      if ((this.objects || []).some((o) => o.contents?.family === "solar"))
+        this.chemistry.advance(dt, c.reactionFeed, c.reactionKill);
       const held = this.contained();
       if (held) simulate();
+      // Rendering a family inside a shell: the same program the orb workspace uses,
+      // told to take this workspace's camera and a placement instead of its own.
+      const drawFamily = (contents, place) => {
+        const family = this.registry[contents.family];
+        if (!family) return;
+        const program = this.familyProgram(family);
+        if (!program) return;
+        this.set(program, {
+          ...shared,
+          uResolution: [w, h],
+          uIor: c.ior,
+          uReflection: c.reflection,
+          uRoughness: c.roughness,
+          uContained: 1,
+          // The shell around a contained family is the glass object holding it.
+          // Drawing its own bounding sphere too would put a second ball inside.
+          uEnclosure: 0,
+          uPlace: place,
+          uPlaceScale: contents.scale,
+        });
+        for (const key of Object.keys(materialDefaults)) {
+          // family has no uniform; enclosure is decided above, not by the scene.
+          if (key === "family" || key === "enclosure") continue;
+          this.uniform(
+            program,
+            "u" + key[0].toUpperCase() + key.slice(1),
+            c[key],
+            ["container", "interior"].includes(key) ? "int" : undefined,
+          );
+        }
+        const declared = parseControls(family.glsl);
+        const chosen = c.params?.[family.id] ?? {};
+        for (const [name, fallback] of Object.entries(declared.defaults))
+          this.uniform(program, uniformName(name), chosen[name] ?? fallback);
+        this.uniform(program, "uChemistry", 1, "int");
+        this.uniform(program, "uSteps", this.show ? 160 : 88, "int");
+        this.uniform(program, "uLightDir[0]", rig.direction, "v4");
+        this.uniform(program, "uLightColor[0]", rig.color, "v4");
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+      };
       this.objectsRenderer.render(
         this.objects || [],
         c,
@@ -582,6 +626,7 @@ export class Engine {
             gl.bindVertexArray(this.vaos[this.read]);
             gl.drawArrays(gl.POINTS, 0, this.count);
           }),
+        drawFamily,
       );
     } else if (this.mode === "orb" && this.registry[c.family]) {
       const family = this.registry[c.family];

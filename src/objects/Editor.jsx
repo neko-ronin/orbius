@@ -82,6 +82,7 @@ export default function ObjectEditor({
   particleContainer,
   onSimulation,
   tip,
+  registry,
 }) {
   const input = useRef(),
     simulationInput = useRef(),
@@ -533,6 +534,79 @@ export default function ObjectEditor({
                   </button>
                 ))}
               </div>
+              {registry && (
+                <label className="material-select">
+                  <span>Inner shader</span>
+                  <select
+                    aria-label="Inner shader"
+                    value={current.contents?.family ?? ""}
+                    onChange={(e) =>
+                      update(
+                        "contents",
+                        e.target.value
+                          ? {
+                              family: e.target.value,
+                              scale: current.contents?.scale ?? 0.55,
+                              offset: current.contents?.offset ?? [0, 0, 0],
+                            }
+                          : undefined,
+                      )
+                    }
+                  >
+                    <option value="">Nothing</option>
+                    {Object.values(registry).map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {current.contents && (
+                <>
+                  <label className="object-slider">
+                    <span>
+                      Inner size<output>{current.contents.scale}</output>
+                    </span>
+                    <input
+                      type="range"
+                      aria-label="Inner size"
+                      min="0.05"
+                      max="2"
+                      step="0.01"
+                      value={current.contents.scale}
+                      onChange={(e) =>
+                        update("contents", {
+                          ...current.contents,
+                          scale: +e.target.value,
+                        })
+                      }
+                    />
+                  </label>
+                  <div className="object-transform">
+                    <span>Inner offset</span>
+                    <div>
+                      {[0, 1, 2].map((axis) => (
+                        <input
+                          key={axis}
+                          type="number"
+                          step="0.05"
+                          aria-label={`Inner offset ${"XYZ"[axis]}`}
+                          value={current.contents.offset[axis]}
+                          onChange={(e) => {
+                            const offset = [...current.contents.offset];
+                            offset[axis] = Math.max(
+                              -4,
+                              Math.min(4, +e.target.value || 0),
+                            );
+                            update("contents", { ...current.contents, offset });
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
               {range("opacity")}
               {range("ior")}
               {range("roughness")}

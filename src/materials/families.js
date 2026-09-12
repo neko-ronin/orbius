@@ -71,6 +71,7 @@ uniform sampler2D uChemistry;
 uniform vec3 uColorA,uColorB,uColorC;
 uniform float uTime,uRotation,uTilt,uZoom,uHue,uIor,uReflection,uRoughness;
 uniform float uInteriorMotion,uEmission,uMaterialScale,uMaterialFold,uSurfaceActivity;
+uniform float uEnclosure,uContained,uPlaceScale;uniform vec3 uPlace;
 uniform int uSteps;
 float hash(vec3 p){return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453);}
 float noise(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(mix(hash(i),hash(i+vec3(1,0,0)),f.x),mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),f.x),f.y),mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x),mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)),f.x),f.y),f.z);}
@@ -91,13 +92,29 @@ void main(){
  vec2 st=(uv*2.-1.)*vec2(uResolution.x/uResolution.y,1.);mat3 cam=turn();
  vec3 ro=cam*vec3(0,0,3.7),rd=cam*normalize(vec3(st/uZoom,-2.5));
  float travel=0.;bool hit=false;vec3 p;
+ if(uContained>.5){
+  // Rendered inside another workspace's scene: take that camera, and map the
+  // placement back onto this family's own unit sphere so the march is unchanged.
+  vec2 ndc=uv*2.-1.;float aspect=uResolution.x/uResolution.y;
+  mat3 inv=transpose(viewMatrix(uTilt,uRotation));
+  vec3 eyeW=inv*vec3(0,0,4.);
+  vec3 dirW=inv*normalize(vec3(ndc.x*aspect/(2.5*uZoom),ndc.y/(2.5*uZoom),-1.));
+  ro=(eyeW-uPlace)/uPlaceScale;rd=normalize(dirW);
+  // Start at the sphere rather than walking to it: placed small, the entry point is
+  // far outside the march's range, and the body would simply never be reached.
+  float b=dot(ro,rd),c=dot(ro,ro)-1.;float disc=b*b-c;
+  if(disc<0.){frag=vec4(0,0,0,1);return;}
+  travel=max(0.,-b-sqrt(disc));
+ }
  // A displaced field overestimates distance, so the step shortens with how far the
  // family is allowed to push the surface.
  float safe=.72/(1.+uMaterialFold*1.2);
  for(int i=0;i<192;i++){if(i>=uSteps)break;p=ro+rd*travel;float d=shell(p);
   if(d<.0015){hit=true;break;}travel+=max(d*safe,.001);if(travel>7.)break;}
  vec3 color=vec3(.003,.005,.009);
- if(!hit){frag=vec4(color,1);return;}
+ // Contained, this is composited additively into somebody else's frame, so a miss
+ // must contribute nothing rather than its own background.
+ if(!hit){frag=vec4(uContained>.5?vec3(0.):color,1);return;}
  vec3 n=normalAt(p);float fres=pow(1.-max(0.,dot(n,-rd)),5.);
 ${
   kind === "volume"
@@ -109,7 +126,7 @@ ${
   float alpha=1.-exp(-m.a*ds*3.5);
   sum+=m.rgb*alpha*trans;trans*=1.-alpha;
   if(trans<.01)break;}
- color=sum+reflected*(.025+fres*.6)*uReflection;`
+ color=sum+reflected*(.025+fres*.6)*uReflection*uEnclosure;`
     : ` color=surface(p,n,rd,fres);`
 }
  float hueAngle=uHue*6.283185;vec3 hueAxis=normalize(vec3(1.));

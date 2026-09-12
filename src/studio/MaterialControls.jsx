@@ -1,4 +1,3 @@
-import React from "react";
 import Control from "./Control.jsx";
 import {
   composerControls,
@@ -7,7 +6,13 @@ import {
 } from "../materials/composer.js";
 import { exportFamily as createBundle } from "../materials/export.js";
 import { palettes } from "../project.js";
-import { contracts, newFamily } from "../materials/families.js";
+import {
+  contracts,
+  newFamily,
+  validateFamilies,
+} from "../materials/families.js";
+import { listFamilies, readFamily, writeFamily } from "./storage.js";
+import React, { useEffect, useState } from "react";
 export default function MaterialControls({
   config,
   update,
@@ -19,6 +24,17 @@ export default function MaterialControls({
   onFamilies,
 }) {
   const mine = families.find((f) => f.id === config.family);
+  // The library is the folder in the repo, read once when this panel appears and
+  // after anything writes to it, so a family authored here can be used elsewhere.
+  const [library, setLibrary] = useState([]);
+  const [note, setNote] = useState("");
+  const refresh = () =>
+    listFamilies()
+      .then((items) => setLibrary(items ?? []))
+      .catch(() => setLibrary([]));
+  useEffect(() => {
+    refresh();
+  }, []);
   // `names` indexes options by position; `options` gives them explicit values, which
   // is what a family needs now that it is identified by name rather than by number.
   const select = (key, label, names, options) => (
@@ -96,6 +112,49 @@ export default function MaterialControls({
           </button>
         )}
       </div>
+      {(library.length > 0 || mine) && (
+        <div className="family-library">
+          {mine && (
+            <button
+              onClick={async () => {
+                try {
+                  const at = await writeFamily(mine.name, mine);
+                  setNote(at ? `Saved to ${at}` : "");
+                  refresh();
+                } catch (e) {
+                  setNote(e.message);
+                }
+              }}
+            >
+              Save to library
+            </button>
+          )}
+          {library.map(({ file, label }) => (
+            <button
+              key={file}
+              className="from-library"
+              title={`Add ${label} to this project`}
+              onClick={async () => {
+                try {
+                  const stored = await readFamily(file);
+                  // Same check as a project's own families: a file on disk is input.
+                  const [family] = validateFamilies([
+                    { ...stored, id: newFamily(stored.kind).id },
+                  ]);
+                  onFamilies([...families, family]);
+                  update("family", family.id);
+                  setNote("");
+                } catch (e) {
+                  setNote(`Could not add ${label}: ${e.message}`);
+                }
+              }}
+            >
+              + {label}
+            </button>
+          ))}
+        </div>
+      )}
+      {note && <p className="material-review">{note}</p>}
       {mine && (
         <div className="family-identity">
           <input
@@ -129,8 +188,11 @@ export default function MaterialControls({
         </p>
       )}
       {config.family !== "composer" ? (
+        // This selects a built-in and applies its tuned settings; it does not create
+        // anything. It used to say "Create a shader family", which is what the two
+        // buttons above it actually do.
         <button className="primary-button" onClick={onStart}>
-          Create a shader family
+          Start from Composed fields
         </button>
       ) : (
         <section className="family-designer">

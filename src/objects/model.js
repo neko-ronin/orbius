@@ -205,6 +205,28 @@ export function validateObjects(objects) {
         throw Error(`Invalid object ${key}.`);
       total += a.length;
     }
+    // A shell may hold a shader family, placed in its own space: "a sun inside a
+    // glass orb" is the family's unit sphere, scaled and offset, rendered through
+    // this workspace's camera and then refracted like any other contents.
+    if (o.contents !== undefined && o.contents !== null) {
+      const c = o.contents;
+      if (
+        typeof c !== "object" ||
+        typeof c.family !== "string" ||
+        c.family.length > 80 ||
+        !Number.isFinite(c.scale) ||
+        c.scale < 0.05 ||
+        c.scale > 4 ||
+        !Array.isArray(c.offset) ||
+        c.offset.length !== 3 ||
+        !c.offset.every((n) => Number.isFinite(n) && Math.abs(n) <= 4)
+      )
+        throw Error("Invalid shell contents.");
+      o = {
+        ...o,
+        contents: { family: c.family, scale: c.scale, offset: [...c.offset] },
+      };
+    }
     if (o.pointLimits !== undefined) {
       if (
         !Array.isArray(o.pointLimits) ||
@@ -256,6 +278,7 @@ export function validateObjects(objects) {
       throw Error("Invalid upper dot color.");
     return {
       ...o,
+      ...(o.contents ? { contents: o.contents } : {}),
       ...(o.role === "layers"
         ? { layerSettings: validateLayers(o.layerSettings ?? layerDefaults) }
         : {}),

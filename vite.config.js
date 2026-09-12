@@ -3,7 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 
 const ROOT = path.resolve(process.cwd(), "saves");
-const AREAS = { state: "state", projects: "projects" };
+const AREAS = { state: "state", projects: "projects", families: "families" };
 const LIMIT = 96 * 1024 * 1024;
 
 // A save name becomes a filename, so it is rebuilt from scratch rather than
@@ -94,18 +94,39 @@ function boastSaves() {
         if (origin && !origins.has(origin))
           return send(403, { error: "origin" });
         const url = new URL(req.url, "http://localhost");
-        const [, area, name] = url.pathname.split("/");
+        const [, area, raw] = url.pathname.split("/");
+        // A name travels through a URL, so a space arrives as %20. Decoding before
+        // the slug is what keeps "New surface" from becoming "new-20surface".
+        let name;
+        try {
+          name = raw === undefined ? raw : decodeURIComponent(raw);
+        } catch {
+          return send(400, { error: "bad name" });
+        }
         try {
           if (url.pathname === "/ping") return send(200, { ok: true });
           if (!AREAS[area]) return send(404, { error: "unknown area" });
           const dir = path.join(ROOT, AREAS[area]);
           if (req.method === "GET" && !name) {
-            const entries = await fs.readdir(dir).catch(() => []);
-            return send(200, {
-              names: entries
-                .filter((f) => f.endsWith(".json"))
-                .map((f) => f.slice(0, -5)),
-            });
+            const entries = (await fs.readdir(dir).catch(() => [])).filter(
+              (f) => f.endsWith(".json"),
+            );
+            // The label is what the thing calls itself. Listing bare filenames made
+            // every picker show a slug instead of a name.
+            const items = await Promise.all(
+              entries.map(async (f) => {
+                const file = f.slice(0, -5);
+                const label = await fs
+                  .readFile(path.join(dir, f), "utf8")
+                  .then((t) => JSON.parse(t)?.name)
+                  .catch(() => null);
+                return {
+                  file,
+                  label: typeof label === "string" ? label : file,
+                };
+              }),
+            );
+            return send(200, { items });
           }
           const file = resolveIn(area, name);
           if (!file) return send(400, { error: "bad name" });

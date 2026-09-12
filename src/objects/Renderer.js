@@ -433,7 +433,7 @@ export class ObjectRenderer {
       g.clear(g.COLOR_BUFFER_BIT);
     }
   }
-  render(objects, config, shared, w, h, target, drawContents) {
+  render(objects, config, shared, w, h, target, drawContents, drawFamily) {
     const e = this.engine,
       g = e.gl;
     // The rig is resolved once per frame on the CPU: kelvin, drift and flicker are
@@ -565,6 +565,22 @@ export class ObjectRenderer {
         .filter((o) => o.visible && o.role !== "glass")
         .forEach((o) => draw(o, this.dots, true)),
     );
+    // A shell may hold a shader family. It is drawn into the same buffer the shells
+    // refract, so it behaves like any other contents — occluded, bent and absorbed.
+    const inner = objects.filter(
+      (o) => o.visible && o.role === "glass" && o.contents && drawFamily,
+    );
+    if (inner.length)
+      clock.span("inner", () => {
+        g.bindVertexArray(e.emptyVAO);
+        for (const o of inner)
+          drawFamily(o.contents, [
+            o.position[0] + o.contents.offset[0],
+            o.position[1] + o.contents.offset[1],
+            o.position[2] + o.contents.offset[2],
+          ]);
+        g.bindVertexArray(null);
+      });
     if (drawContents)
       clock.span("contents", () => {
         // Fade the history, lay this frame's points over it, then add the result to

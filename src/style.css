@@ -2650,3 +2650,24 @@ body.is-scrubbing * {
   cursor: ew-resize !important;
   user-select: none !important;
 }
+
+/* The family library: what is in saves/families, and a way to put something there. */
+.family-library {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.family-library button {
+  padding: 6px 9px;
+  border: 1px dashed #38463c;
+  border-radius: 4px;
+  background: none;
+  font-size: 10px;
+  color: var(--muted);
+}
+.family-library button:hover {
+  border-style: solid;
+  border-color: var(--accent);
+  color: #fff;
+}
