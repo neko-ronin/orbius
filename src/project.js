@@ -1,5 +1,10 @@
 import { validateObjects } from "./objects/model.js";
-import { familyById, LEGACY, parseControls } from "./materials/families.js";
+import {
+  LEGACY,
+  parseControls,
+  resolveFamilies,
+  validateFamilies,
+} from "./materials/families.js";
 import { speciesDefaults, speciesControls } from "./particles/catalog.js";
 import { materialDefaults, materialControls } from "./materials/catalog.js";
 export const palettes = [
@@ -836,6 +841,10 @@ export function conformSimulation(config, interior, scale) {
   };
 }
 export function validateProject(data) {
+  // Families the project carries, resolved alongside the built-ins before anything
+  // that names a family is checked against them.
+  const families = validateFamilies(data?.families);
+  const registry = resolveFamilies(families);
   if (!data || data.format !== "boast-project" || data.version !== 1)
     throw Error("This is not a supported BOAST project (version 1).");
   if (!["particles", "orb", "glass", "nodes"].includes(data.mode))
@@ -849,7 +858,7 @@ export function validateProject(data) {
         throw Error("Invalid family parameters.");
       const params = {};
       for (const [id, values] of Object.entries(value)) {
-        const family = familyById[id];
+        const family = registry[id];
         // A file may name a family this build does not have. Dropping its values is
         // right: they describe controls nothing can read.
         if (!family || !values || typeof values !== "object") continue;
@@ -876,7 +885,7 @@ export function validateProject(data) {
       // never valid and must not quietly become the custom surface.
       const id =
         typeof value === "number" ? (value === 0 ? "" : LEGACY[value]) : value;
-      if (id === undefined || (id !== "" && !familyById[id]))
+      if (id === undefined || (id !== "" && !registry[id]))
         throw Error("Unknown material family.");
       config.family = id;
       continue;
@@ -1016,6 +1025,8 @@ export function validateProject(data) {
       : {}),
     graph: structuredClone(graph),
     fields: structuredClone(fields),
+    // Omitted when empty, so a project that never authored one is unchanged on disk.
+    ...(families.length ? { families } : {}),
     ...(data.objects !== undefined ? { objects } : {}),
     // Only kept when it names a glass shell that is actually in the scene.
     ...(objects.some((o) => o.id === particleContainer && o.role === "glass")

@@ -19,7 +19,13 @@ import { createRoot } from "react-dom/client";
 import Icon from "./Icons.jsx";
 import NodeEditor from "./NodeEditor.jsx";
 import Control from "./studio/Control.jsx";
-import { familyById, parseControls } from "./materials/families.js";
+import {
+  parseControls,
+  resolveFamilies,
+  sourceOffset,
+  contracts,
+  MAX_GLSL,
+} from "./materials/families.js";
 import { Engine } from "./engine.js";
 import {
   defaults,
@@ -153,6 +159,7 @@ function App() {
     }
     try {
       Object.assign(engine.current, {
+        registry,
         config: resolved.config,
         mode: resolved.mode,
       });
@@ -219,7 +226,19 @@ function App() {
     [recording, setRecording] = useState(false),
     [recover, setRecover] = useState(null),
     [browsing, setBrowsing] = useState(null),
+    [families, setFamilies] = useState([]),
     [dirty, setDirty] = useState(false);
+  // Built-ins plus whatever this project authored. Everything that looks a family up
+  // goes through here, so an authored one is indistinguishable from a shipped one.
+  const registry = useMemo(() => resolveFamilies(families), [families]);
+  // The editor edits whichever authored family is selected, and falls back to the
+  // custom surface. A built-in has to be duplicated first — editing a shipped family
+  // in place would leave a project that renders differently from an identical one.
+  const editing = families.find((f) => f.id === config.family) ?? null;
+  const familyError =
+    editing && stats.familyError?.id === editing.id
+      ? authorMessage(stats.familyError.message, sourceOffset(editing))
+      : null;
   const workspaces = useRef({});
   const tipTimer = useRef();
   // Every panel opens the same field-note card, so the handlers live once here and
@@ -248,6 +267,7 @@ function App() {
   latest.current = {
     config,
     objects,
+    families,
     mode,
     graph,
     shader,
@@ -308,6 +328,7 @@ function App() {
         (o) => o.id === particleContainer && o.role === "glass" && o.visible,
       );
       Object.assign(engine.current, {
+        registry,
         config: resolved.config,
         mode: resolved.mode,
         show,
@@ -325,7 +346,7 @@ function App() {
           : null,
       });
     }
-  }, [resolved, show, paused, fields, objects, particleContainer]);
+  }, [resolved, show, paused, fields, objects, particleContainer, registry]);
   useEffect(() => {
     let cancelled = false;
     readStored("autosave")
@@ -387,6 +408,7 @@ function App() {
     name,
     objects,
     particleContainer,
+    families,
   ]);
   function project() {
     const s = latest.current;
@@ -397,6 +419,7 @@ function App() {
       mode: s.mode,
       config: s.config,
       objects: s.objects,
+      ...(s.families.length ? { families: s.families } : {}),
       shader: s.compiled,
       shaderDraft: s.shader,
       graph: s.graph,
@@ -479,6 +502,7 @@ function App() {
       setShader(p.shaderDraft ?? p.shader);
       setShaderError("");
       setConfig(p.config);
+      setFamilies(p.families || []);
       setObjects(p.objects || []);
       setSelectedObject(p.objects?.[0]?.id || null);
       objectHistory.current = [];
@@ -741,7 +765,7 @@ function App() {
   // by family, so the panel needs no list of them and two families may both call
   // something "scale".
   function familyControls() {
-    const family = familyById[config.family];
+    const family = registry[config.family];
     if (!family) return null;
     const { controls: declared, defaults: fallback } = parseControls(
       family.glsl,
@@ -1276,6 +1300,12 @@ function App() {
                   update={update}
                   onCollect={collect}
                   tip={tip}
+                  families={families}
+                  registry={registry}
+                  onFamilies={(next) => {
+                    setFamilies(next);
+                    setDirty(true);
+                  }}
                   onStart={() => {
                     setConfig((c) => ({
                       ...c,
@@ -1427,39 +1457,71 @@ function App() {
             <div className="code-panel">
               {resolved.mode === "orb" ? (
                 <>
-                  {config.family && (
-                    <p className="family-code-note">
-                      This is the Custom GLSL surface, and it is compiling as
-                      you type. You are looking at{" "}
-                      <b>{familyById[config.family].name}</b>, so switch to see
-                      it.
-                      <button onClick={() => update("family", "")}>
-                        Show this surface
-                      </button>
-                    </p>
+                  {editing ? (
+                    <>
+                      <div className="code-intro">
+                        <span>{editing.name}.glsl</span>
+                      </div>
+                      <p>
+                        Define <code>displace(p)</code> and{" "}
+                        <code>{contracts[editing.kind].signature}</code>.{" "}
+                        {contracts[editing.kind].note} Declare a slider with{" "}
+                        <code>// @control name min max step "note"</code>.
+                      </p>
+                      <textarea
+                        className={familyError ? "is-invalid" : ""}
+                        spellCheck="false"
+                        aria-label="Family GLSL source"
+                        value={editing.glsl}
+                        maxLength={MAX_GLSL}
+                        onChange={(e) => {
+                          const glsl = e.target.value;
+                          setFamilies((list) =>
+                            list.map((f) =>
+                              f.id === editing.id ? { ...f, glsl } : f,
+                            ),
+                          );
+                          setDirty(true);
+                        }}
+                      />
+                    </>
+                  ) : (
+                    <>
+                      {config.family && (
+                        <p className="family-code-note">
+                          This is the Custom GLSL surface, and it compiles as
+                          you type. You are looking at{" "}
+                          <b>{registry[config.family].name}</b>, which is built
+                          in.
+                          <button onClick={() => update("family", "")}>
+                            Show this surface
+                          </button>
+                        </p>
+                      )}
+                      <div className="code-intro">
+                        <span>surface.glsl</span>
+                      </div>
+                      <p>
+                        Define <code>shape(p)</code> and{" "}
+                        <code>pigment(p, n)</code>. Geometry, normals, shadows,
+                        and reflections share your surface.
+                      </p>
+                      <textarea
+                        className={shaderError ? "is-invalid" : ""}
+                        spellCheck="false"
+                        aria-label="GLSL shader source"
+                        value={shader}
+                        maxLength={20000}
+                        onChange={(e) => {
+                          setShader(e.target.value);
+                          setDirty(true);
+                        }}
+                      />
+                    </>
                   )}
-                  <div className="code-intro">
-                    <span>surface.glsl</span>
-                  </div>
-                  <p>
-                    Define <code>shape(p)</code> and <code>pigment(p, n)</code>.
-                    Geometry, normals, shadows, and reflections share your
-                    surface.
-                  </p>
-                  <textarea
-                    className={shaderError ? "is-invalid" : ""}
-                    spellCheck="false"
-                    aria-label="GLSL shader source"
-                    value={shader}
-                    maxLength={20000}
-                    onChange={(e) => {
-                      setShader(e.target.value);
-                      setDirty(true);
-                    }}
-                  />
-                  {shaderError && (
+                  {(editing ? familyError : shaderError) && (
                     <pre className="shader-error" role="alert">
-                      {shaderError}
+                      {editing ? familyError : shaderError}
                     </pre>
                   )}
                   <div className="code-actions">

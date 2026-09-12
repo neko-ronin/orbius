@@ -3,9 +3,9 @@ import { SpeciesField } from "./particles/SpeciesField.js";
 import { Chemistry } from "./materials/Chemistry.js";
 import { materialDefaults } from "./materials/catalog.js";
 import {
-  familyById,
   familySource,
   parseControls,
+  resolveFamilies,
   uniformName,
 } from "./materials/families.js";
 import { GpuTimer } from "./gpuTimer.js";
@@ -40,6 +40,7 @@ export class Engine {
       );
     this.hdr = !!this.gl.getExtension("EXT_color_buffer_float");
     this.timer = new GpuTimer(this.gl);
+    this.registry = resolveFamilies();
     this.time = 0;
     this.tick = 0;
     this.read = 0;
@@ -109,18 +110,35 @@ export class Engine {
       shaders.forEach((s) => gl.deleteShader(s));
     }
   }
-  // One program per family, compiled on first use and kept. A family is a value, so
-  // the cache key is its identity and its source: an edited family recompiles, an
-  // unchanged one does not.
+  // One program per family, compiled when its source changes and kept afterwards.
+  //
+  // This must never throw into render(): frame() treats a render error as fatal and
+  // disposes the engine, so a half-typed authored family would take the whole app
+  // down. A failed compile keeps the family's last good program on screen, and a
+  // family that has never compiled draws nothing rather than crashing. The failed
+  // source is remembered so the driver is not asked the same broken question every
+  // frame.
   familyProgram(family) {
-    this.families ??= new Map();
-    const key = `${family.id}:${family.glsl.length}:${family.glsl}`;
-    let program = this.families.get(key);
-    if (!program) {
-      program = this.program(quadVertex, familySource(family));
-      this.families.set(key, program);
+    this.familyPrograms ??= new Map();
+    const slot = this.familyPrograms.get(family.id);
+    if (slot?.source === family.glsl) return slot.program;
+    try {
+      const program = this.program(quadVertex, familySource(family));
+      if (slot?.program) {
+        this.gl.deleteProgram(slot.program.p);
+        this.programs = this.programs.filter((p) => p !== slot.program.p);
+      }
+      this.familyPrograms.set(family.id, { source: family.glsl, program });
+      this.familyError = null;
+      return program;
+    } catch (e) {
+      this.familyPrograms.set(family.id, {
+        source: family.glsl,
+        program: slot?.program ?? null,
+      });
+      this.familyError = { id: family.id, message: e.message };
+      return slot?.program ?? null;
     }
-    return program;
   }
   compile(source) {
     const next = this.program(quadVertex, orbFragment(source));
@@ -565,45 +583,52 @@ export class Engine {
             gl.drawArrays(gl.POINTS, 0, this.count);
           }),
       );
-    } else if (this.mode === "orb" && familyById[c.family]) {
-      const family = familyById[c.family];
+    } else if (this.mode === "orb" && this.registry[c.family]) {
+      const family = this.registry[c.family];
       const material = this.familyProgram(family);
-      if (c.family === "solar")
-        this.chemistry.advance(dt, c.reactionFeed, c.reactionKill);
-      gl.activeTexture(gl.TEXTURE1);
-      gl.bindTexture(gl.TEXTURE_2D, this.chemistry.texture);
-      gl.activeTexture(gl.TEXTURE0);
-      gl.viewport(0, 0, w, h);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, this.targets[this.trailRead].fb);
-      gl.bindVertexArray(this.emptyVAO);
-      this.set(material, {
-        ...shared,
-        uResolution: [w, h],
-        uIor: c.ior,
-        uReflection: c.reflection,
-        uRoughness: c.roughness,
-      });
-      for (const key of Object.keys(materialDefaults)) {
-        // family is an id, not a number, and has no uniform of its own.
-        if (key === "family") continue;
-        const uniform = "u" + key[0].toUpperCase() + key.slice(1);
-        this.uniform(
-          material,
-          uniform,
-          c[key],
-          ["container", "interior"].includes(key) ? "int" : undefined,
-        );
+      if (!material) {
+        // Nothing to draw yet: a new family whose first source does not compile.
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.targets[this.trailRead].fb);
+        gl.clearColor(0.003, 0.005, 0.009, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+      } else {
+        if (c.family === "solar")
+          this.chemistry.advance(dt, c.reactionFeed, c.reactionKill);
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, this.chemistry.texture);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.viewport(0, 0, w, h);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.targets[this.trailRead].fb);
+        gl.bindVertexArray(this.emptyVAO);
+        this.set(material, {
+          ...shared,
+          uResolution: [w, h],
+          uIor: c.ior,
+          uReflection: c.reflection,
+          uRoughness: c.roughness,
+        });
+        for (const key of Object.keys(materialDefaults)) {
+          // family is an id, not a number, and has no uniform of its own.
+          if (key === "family") continue;
+          const uniform = "u" + key[0].toUpperCase() + key.slice(1);
+          this.uniform(
+            material,
+            uniform,
+            c[key],
+            ["container", "interior"].includes(key) ? "int" : undefined,
+          );
+        }
+        // Whatever this family declared for itself, from the project or its own
+        // default. Nothing here knows the names; the shader is the only source.
+        const declared = parseControls(family.glsl);
+        const chosen = c.params?.[family.id] ?? {};
+        for (const [name, fallback] of Object.entries(declared.defaults))
+          this.uniform(material, uniformName(name), chosen[name] ?? fallback);
+        this.uniform(material, "uChemistry", 1, "int");
+        bindRig(material);
+        this.uniform(material, "uSteps", this.show ? 160 : 88, "int");
+        this.timer.span("material", () => gl.drawArrays(gl.TRIANGLES, 0, 3));
       }
-      // Whatever this family declared for itself, from the project or its own
-      // default. Nothing here knows the names; the shader is the only source.
-      const declared = parseControls(family.glsl);
-      const chosen = c.params?.[family.id] ?? {};
-      for (const [name, fallback] of Object.entries(declared.defaults))
-        this.uniform(material, uniformName(name), chosen[name] ?? fallback);
-      this.uniform(material, "uChemistry", 1, "int");
-      bindRig(material);
-      this.uniform(material, "uSteps", this.show ? 160 : 88, "int");
-      this.timer.span("material", () => gl.drawArrays(gl.TRIANGLES, 0, 3));
     } else if (this.mode === "orb") {
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.targets[this.trailRead].fb);
       gl.bindVertexArray(this.emptyVAO);
@@ -671,6 +696,7 @@ export class Engine {
         time: this.time,
         count: this.count || 0,
         gpu: this.gpu,
+        familyError: this.familyError,
       });
       this.statTime = now;
       this.frames = 0;

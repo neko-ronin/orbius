@@ -2502,3 +2502,50 @@ input[type="color"] {
   border-color: var(--accent);
   color: #fff;
 }
+
+/* Authoring a family: the actions sit with the family that owns them. */
+.family-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 0;
+}
+.family-actions button {
+  flex: 1 1 auto;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #00000030;
+  font-size: 10px;
+  color: #cfd9d2;
+}
+.family-actions button:hover {
+  border-color: var(--accent);
+  color: #fff;
+}
+.family-identity {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.family-identity input {
+  flex: 1;
+  min-width: 0;
+  background: #171d19;
+  border: 1px solid #38463c;
+  border-radius: 4px;
+  padding: 7px;
+  font-size: 11px;
+  color: #d8e5dc;
+}
+.family-identity button {
+  width: 28px;
+  border: 1px solid #38463c;
+  border-radius: 4px;
+  background: none;
+  color: var(--muted);
+}
+.family-identity button:hover {
+  border-color: #7a3350;
+  color: #ef9fba;
+}

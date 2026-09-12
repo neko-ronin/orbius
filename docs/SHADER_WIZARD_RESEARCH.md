@@ -249,9 +249,21 @@ working program running, which is the property that makes typing into a live sha
 bearable at all: the editor shows a soft red edge and the line, and the render
 carries on.
 
-Still to come for authoring proper: editing a *family* rather than the custom
-surface, which needs somewhere for a user family to live — a record in the project
-rather than a module constant.
+**A family you can add in the app** — done. A project carries its own families
+alongside the built-ins, and the merged registry is what every consumer reads, so an
+authored family is indistinguishable from a shipped one: it appears in the dropdown,
+its declared controls build a panel section, and it is what the editor edits.
+
+Built-ins are duplicated rather than edited in place, because editing a shipped
+family would leave a project that renders differently from an identical one
+elsewhere. Families are identified, never named, so renaming one cannot orphan the
+parameters saved against it.
+
+The load-bearing detail is that compilation fails softly. `frame()` treats a render
+error as fatal and disposes the engine, so a half-typed family would take the whole
+application down; `familyProgram` keeps the last good program on screen instead, and
+a family that has never compiled draws nothing. The failed source is remembered so
+the driver is not asked the same broken question sixty times a second.
 
 ## 5. Recommended path
 

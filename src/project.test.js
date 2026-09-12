@@ -12,6 +12,7 @@ import {
   lightRoles,
 } from "./project.js";
 import { newObject } from "./objects/model.js";
+import { newFamily, builtins } from "./materials/families.js";
 const fixture = () => ({
   format: "boast-project",
   version: 1,
@@ -384,4 +385,44 @@ test("a family's own declared parameters round trip, clamp, and survive a family
     q.config.params = shape;
     assert.throws(() => validateProject(q));
   }
+});
+
+test("a project carries the families it authored, and refuses ones it cannot trust", () => {
+  const mine = newFamily("volume", "Filament weave");
+  const p = fixture();
+  p.families = [mine];
+  p.config.family = mine.id;
+  p.config.params = { [mine.id]: { density: 3 } };
+  const restored = validateProject(JSON.parse(JSON.stringify(p)));
+  assert.deepEqual(restored.families, [mine]);
+  assert.equal(restored.config.family, mine.id);
+  // Parameters are checked against the family's own declarations, which only exist
+  // because the project brought the family with it.
+  assert.deepEqual(restored.config.params, { [mine.id]: { density: 3 } });
+
+  // A project with no authored families does not grow the key.
+  assert.equal("families" in validateProject(fixture()), false);
+
+  for (const bad of [
+    [{ ...mine, id: builtins[0].id }], // shadowing a built-in
+    [{ ...mine, id: "../etc" }],
+    [{ ...mine, kind: "raymarch" }],
+    [{ ...mine, name: "" }],
+    [{ ...mine, glsl: 42 }],
+    [mine, { ...mine }], // duplicate id
+    Array.from({ length: 25 }, () => newFamily("volume")),
+    "not a list",
+  ]) {
+    const q = fixture();
+    q.families = bad;
+    assert.throws(
+      () => validateProject(q),
+      `accepted ${JSON.stringify(bad).slice(0, 40)}`,
+    );
+  }
+
+  // Selecting a family the project does not carry is not a valid document.
+  const orphan = fixture();
+  orphan.config.family = "fdeadbeef";
+  assert.throws(() => validateProject(orphan));
 });

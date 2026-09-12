@@ -7,14 +7,18 @@ import {
 } from "../materials/composer.js";
 import { exportFamily as createBundle } from "../materials/export.js";
 import { palettes } from "../project.js";
-import { builtins } from "../materials/families.js";
+import { contracts, newFamily } from "../materials/families.js";
 export default function MaterialControls({
   config,
   update,
   onStart,
   onCollect,
   tip,
+  families,
+  registry,
+  onFamilies,
 }) {
+  const mine = families.find((f) => f.id === config.family);
   // `names` indexes options by position; `options` gives them explicit values, which
   // is what a family needs now that it is identified by name rather than by number.
   const select = (key, label, names, options) => (
@@ -53,11 +57,71 @@ export default function MaterialControls({
     <div className="material-identity">
       <span className="eyebrow">MATERIAL FAMILY</span>
       {/* Generated from the registry, so a family that exists is a family you can
-          choose — which is the point of families being values at all. */}
+          choose — and one this project authored sits beside the shipped ones. */}
       {select("family", "Shader family", null, [
         ["", "Custom GLSL surface"],
-        ...builtins.map((f) => [f.id, f.name]),
+        ...Object.values(registry).map((f) => [f.id, f.name]),
       ])}
+      <div className="family-actions">
+        {Object.entries(contracts).map(([kind, contract]) => (
+          <button
+            key={kind}
+            title={contract.note}
+            onClick={() => {
+              const family = newFamily(
+                kind,
+                `New ${contract.label.toLowerCase()}`,
+              );
+              onFamilies([...families, family]);
+              update("family", family.id);
+            }}
+          >
+            + {contract.label}
+          </button>
+        ))}
+        {config.family && !mine && (
+          <button
+            title="Copy this family into the project so you can edit it"
+            onClick={() => {
+              const source = registry[config.family];
+              const copy = {
+                ...newFamily(source.kind, `${source.name} copy`),
+                glsl: source.glsl,
+              };
+              onFamilies([...families, copy]);
+              update("family", copy.id);
+            }}
+          >
+            Duplicate to edit
+          </button>
+        )}
+      </div>
+      {mine && (
+        <div className="family-identity">
+          <input
+            aria-label="Family name"
+            value={mine.name}
+            maxLength={80}
+            onChange={(e) =>
+              onFamilies(
+                families.map((f) =>
+                  f.id === mine.id ? { ...f, name: e.target.value } : f,
+                ),
+              )
+            }
+          />
+          <button
+            aria-label={`Delete ${mine.name}`}
+            onClick={() => {
+              if (!window.confirm(`Delete ${mine.name}?`)) return;
+              onFamilies(families.filter((f) => f.id !== mine.id));
+              update("family", "");
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
       {config.family === "solar" && (
         <p className="material-review">
           Under review · improving. Reads as a luminous body now, but the cells

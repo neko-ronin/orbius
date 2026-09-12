@@ -117,6 +117,13 @@ ${
  frag=vec4(max(color,0.),1.);
 }`;
 
+// Where the author's first line lands in the assembled shader, so a compiler
+// message can be translated back. Derived from the assembly itself, so it cannot
+// drift when the preamble changes.
+export function sourceOffset(family) {
+  const source = familySource(family);
+  return source.slice(0, source.indexOf(family.glsl)).split("\n").length - 1;
+}
 export function familySource(family) {
   const declared = Object.keys(parseControls(family.glsl).controls)
     .map((k) => `uniform float ${uniformName(k)};`)
@@ -222,3 +229,73 @@ export const familyById = Object.fromEntries(builtins.map((f) => [f.id, f]));
 // Saved projects carry the old integer. Nothing in a file should have to change for
 // a refactor that is supposed to be invisible.
 export const LEGACY = { 1: "silk", 2: "solar", 3: "mercury", 4: "composer" };
+
+// What a new family starts as. Enough to compile and show something, so the first
+// thing an author sees is a working object rather than an error.
+export const templates = {
+  volume: `// @control density 0.5 6 0.1 "How much light the body holds." "volumetric density"
+// @default density 2.4
+// @control scale 1 12 0.1 "How many times the structure repeats." "procedural noise frequency"
+// @default scale 4
+float displace(vec3 p){return 0.;}
+vec4 medium(vec3 q){
+ vec3 w=q*uScale;
+ w+=sin(w.yzx*1.4+uTime*uInteriorMotion)*uMaterialFold;
+ float v=dot(sin(w),cos(w.zxy));
+ float den=exp(-abs(v)*8.)*uDensity;
+ vec3 tint=mix(uColorA,uColorC,.5+.5*sin(w.y+w.z));
+ return vec4(tint*uEmission,den);
+}`,
+  surface: `// @control sheen 0 1 0.01 "How much of the studio the surface returns." "specular reflectance"
+// @default sheen 0.6
+// @control ripple 0 0.3 0.005 "How far the surface departs from a sphere." "signed distance displacement"
+// @default ripple 0.08
+float displace(vec3 p){
+ vec3 q=p*3.+uTime*uInteriorMotion*.3;
+ return sin(q.x)*sin(q.y)*sin(q.z)*uRipple;
+}
+vec3 surface(vec3 p,vec3 n,vec3 rd,float fres){
+ vec3 tint=mix(uColorA,uColorC,.5+.5*n.y);
+ return envRoom(reflect(rd,n),uRoughness)*mix(tint,vec3(1.),fres)*uSheen;
+}`,
+};
+// Ids the author never types: a family is identified, not named, so renaming one
+// cannot orphan the parameters saved against it.
+export const newFamily = (kind, name) => ({
+  id: `f${crypto.randomUUID().slice(0, 8)}`,
+  name: name || "Untitled family",
+  kind,
+  glsl: templates[kind],
+});
+// A project carries its own families; the built-ins are always there. Ids are
+// unique across both, so a lookup never has to know where a family came from.
+export function resolveFamilies(userFamilies = []) {
+  return Object.fromEntries(
+    [...builtins, ...userFamilies].map((f) => [f.id, f]),
+  );
+}
+export const MAX_FAMILIES = 24;
+export const MAX_GLSL = 20000;
+export function validateFamilies(list) {
+  if (list === undefined) return [];
+  if (!Array.isArray(list) || list.length > MAX_FAMILIES)
+    throw Error(`A project supports up to ${MAX_FAMILIES} families.`);
+  const seen = new Set(builtins.map((f) => f.id));
+  return list.map((f) => {
+    if (
+      !f ||
+      typeof f.id !== "string" ||
+      !/^f[a-z0-9]{4,32}$/.test(f.id) ||
+      seen.has(f.id) ||
+      typeof f.name !== "string" ||
+      !f.name.trim() ||
+      f.name.length > 80 ||
+      !contracts[f.kind] ||
+      typeof f.glsl !== "string" ||
+      f.glsl.length > MAX_GLSL
+    )
+      throw Error("Invalid shader family.");
+    seen.add(f.id);
+    return { id: f.id, name: f.name, kind: f.kind, glsl: f.glsl };
+  });
+}
