@@ -63,6 +63,19 @@ Video uses the browser's MediaRecorder with a 30 FPS capture stream and a 12 Mbp
 
 This is a real-time artistic renderer, not a physically based path tracer. Orb reflection rays can hit neighboring folds; otherwise they sample an analytic environment. Refraction uses the refraction index to bend an interior color sample, not a full volumetric transmission model. Very aggressive or non-distance GLSL can introduce ray-marching artifacts or exhaust GPU time. The inspector's supplied geometry range also allows disconnected lobes at high displacement.
 
+Everything the app saves — the autosave, your collection, and projects — is written
+to `saves/` inside the repository, through a dev-server endpoint that exists only
+while `npm run dev` is running. The folder is gitignored. **Open** lists what is in
+`saves/projects/` and still offers a file picker for anything from elsewhere. A built
+copy has no dev server to write through and falls back to IndexedDB and browser
+downloads.
+
+Because that endpoint can write files, it is confined deliberately: names are rebuilt
+from `[a-z0-9-]` rather than escaped, the target directory comes from a fixed map, the
+extension is fixed, every request must carry an `x-boast` header (which forces a CORS
+preflight that only this dev server's own origins pass), and the `Origin` header is
+checked independently.
+
 A contained simulation is confined by a 64³ occupancy grid sampled in the solver, which is an art-directed boundary force, not rigid-body collision: particles are pushed back along the field gradient and can dip into a thin wall under a low containment force. Thin features narrower than a voxel do not confine reliably. Glass objects sit on a world-space stage: an analytic floor with a horizon, a contact shadow from a top-down coverage mask, and a world-locked studio rig whose highlights sweep as the camera orbits. The rig is three data-driven softboxes — key, fill, back — each with spherical placement, width and height, a kelvin colour temperature, intensity, and arrhythmic drift and flicker; the contact shadow follows the key light. Kelvin and the temporal motion resolve on the CPU once per frame, so the cost is per light rather than per pixel. Shells also leave a reflection in the floor, drawn by mirroring the mesh through the floor plane and shading it with the rig alone; **Floor finish** scales it, and a matte sweep skips the pass. A shell's contents and dot objects outside one are not reflected. **Studio backdrop** dims only the directly visible background — glass always reflects the full room. **Floor texture** gives the sweep undulation, drag marks, and tooth so reflections have something to break up on, fading out with distance so fine detail never becomes aliasing. Glass objects render into a multisampled buffer, so shell silhouettes are antialiased; the sample count steps down at high output resolutions. Shells composite back to front by camera depth over a shared depth buffer, so each shell refracts and occludes the shells behind it. Refraction is still a single screen-space offset per shell, not a ray traced through successive dielectric boundaries, and it can only bend light from what is on screen — lookups that would leave the frame fall back to looking straight through the shell.
 
 Node graphs are a single-input composition chain with reusable branches, not a general-purpose image mixer or arbitrary GLSL node compiler. Repeated nodes of the same parameter type use the last connected value. Particle motion nodes affect the particle simulation; on orbs they change the surface domain warp.

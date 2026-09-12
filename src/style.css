@@ -2414,3 +2414,49 @@ input[type="color"] {
   margin-top: 12px;
   padding: 12px;
 }
+
+/* The saves-folder picker. Same surface as the field guide, listing what Save wrote. */
+.saves-modal {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 22px 24px 18px;
+  min-width: 320px;
+  max-width: 440px;
+  max-height: 70vh;
+  overflow: auto;
+}
+.saves-modal h3 {
+  margin: 4px 0 14px;
+  font-size: 17px;
+  font-weight: 500;
+}
+.saves-modal ul {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.saves-modal li button {
+  width: 100%;
+  text-align: left;
+  padding: 9px 11px;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  background: #00000030;
+  font-size: 12px;
+  color: #d3dcd6;
+}
+.saves-modal li button:hover {
+  border-color: var(--accent);
+  color: #fff;
+}
+.saves-elsewhere {
+  font-size: 10px;
+  color: var(--muted);
+  padding: 6px 0 0;
+}
+.saves-elsewhere:hover {
+  color: var(--accent);
+}

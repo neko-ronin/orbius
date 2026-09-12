@@ -1,4 +1,10 @@
-import { readStored, writeStored } from "./studio/storage.js";
+import {
+  readStored,
+  writeStored,
+  writeProject,
+  listProjects,
+  readProject,
+} from "./studio/storage.js";
 import ObjectEditor from "./objects/Editor.jsx";
 import SpeciesControls from "./studio/SpeciesControls.jsx";
 import Library from "./studio/Library.jsx";
@@ -165,8 +171,11 @@ function App() {
       await writeStored("collection", next);
       setSaved(next);
       notify("Specimen added to your collection.");
-    } catch {
-      notify("Collection storage is full. Save your project to disk.");
+    } catch (e) {
+      // This used to blame storage for every failure — a thrown render, a missing
+      // canvas, a bad thumbnail all reported "storage is full", which is how a
+      // working save comes to look like a broken one.
+      notify(`Could not collect this specimen: ${e.message}`);
     }
   }
   async function deleteSpecimen(id) {
@@ -207,6 +216,7 @@ function App() {
     [tipEntry, setTipEntry] = useState(null),
     [recording, setRecording] = useState(false),
     [recover, setRecover] = useState(null),
+    [browsing, setBrowsing] = useState(null),
     [dirty, setDirty] = useState(false);
   const workspaces = useRef({});
   const tipTimer = useRef();
@@ -487,12 +497,20 @@ function App() {
       notify(`Could not load project: ${e.message}`);
     }
   }
-  function save() {
+  // The repo's saves/ folder is the default. A built copy has no dev server to write
+  // through, so it falls back to a download.
+  async function save() {
+    const data = project();
+    const file = name.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "untitled";
+    const written = await writeProject(file, data).catch(() => null);
+    if (written) {
+      setDirty(false);
+      notify(`Saved to ${written}`);
+      return;
+    }
     download(
-      new Blob([JSON.stringify(project(), null, 2)], {
-        type: "application/json",
-      }),
-      `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "untitled"}.boast.json`,
+      new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
+      `${file}.boast.json`,
     );
     setDirty(false);
     notify("Project saved to your downloads.");
@@ -826,8 +844,14 @@ function App() {
         </nav>
         <div className="top-actions">
           <button
-            title="Load project from disk"
-            onClick={() => file.current.click()}
+            title="Open a project from the saves folder"
+            onClick={async () => {
+              // The saves folder is where Save writes, so it is where Open looks
+              // first. A file from anywhere else is still one click away.
+              const names = await listProjects().catch(() => null);
+              if (names?.length) setBrowsing(names);
+              else file.current.click();
+            }}
           >
             <Icon name="folder" />
             Open
@@ -1494,6 +1518,49 @@ function App() {
           >
             {tipEntry.entry[5]} ↗
           </a>
+        </div>
+      )}
+      {browsing && (
+        <div className="modal-backdrop" onClick={() => setBrowsing(null)}>
+          <section
+            className="saves-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Open a project"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <span className="eyebrow">SAVES / IN THIS REPOSITORY</span>
+            <h3>Open a project</h3>
+            <ul>
+              {browsing.map((n) => (
+                <li key={n}>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const data = await readProject(n);
+                        setBrowsing(null);
+                        apply(data);
+                      } catch (e) {
+                        setBrowsing(null);
+                        notify(`Could not open ${n}: ${e.message}`);
+                      }
+                    }}
+                  >
+                    {n}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <button
+              className="saves-elsewhere"
+              onClick={() => {
+                setBrowsing(null);
+                file.current.click();
+              }}
+            >
+              Open a file from elsewhere…
+            </button>
+          </section>
         </div>
       )}
       {toast && (
