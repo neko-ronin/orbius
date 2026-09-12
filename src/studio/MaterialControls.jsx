@@ -7,6 +7,7 @@ import {
 } from "../materials/composer.js";
 import { exportFamily as createBundle } from "../materials/export.js";
 import { palettes } from "../project.js";
+import { builtins } from "../materials/families.js";
 export default function MaterialControls({
   config,
   update,
@@ -14,16 +15,20 @@ export default function MaterialControls({
   onCollect,
   tip,
 }) {
-  const select = (key, label, names) => (
+  // `names` indexes options by position; `options` gives them explicit values, which
+  // is what a family needs now that it is identified by name rather than by number.
+  const select = (key, label, names, options) => (
     <label className="material-select" key={key}>
       <span>{label}</span>
       <select
         aria-label={label}
         value={config[key]}
-        onChange={(e) => update(key, +e.target.value)}
+        onChange={(e) =>
+          update(key, options ? e.target.value : +e.target.value)
+        }
       >
-        {names.map((name, i) => (
-          <option value={i} key={name}>
+        {(options ?? names.map((name, i) => [i, name])).map(([value, name]) => (
+          <option value={value} key={String(value)}>
             {name}
           </option>
         ))}
@@ -47,20 +52,19 @@ export default function MaterialControls({
   return (
     <div className="material-identity">
       <span className="eyebrow">MATERIAL FAMILY</span>
-      {select("family", "Shader family", [
-        "Custom GLSL surface",
-        "Prismatic silk",
-        "Solar cartography · under review",
-        "Liquid mercury · under review",
-        "Family designer",
+      {/* Generated from the registry, so a family that exists is a family you can
+          choose — which is the point of families being values at all. */}
+      {select("family", "Shader family", null, [
+        ["", "Custom GLSL surface"],
+        ...builtins.map((f) => [f.id, f.name]),
       ])}
-      {[2, 3].includes(config.family) && (
+      {config.family === "solar" && (
         <p className="material-review">
-          Very unimpressive · on the chopping block. Retained for improvement
-          and comparison.
+          Under review · improving. Reads as a luminous body now, but the cells
+          are large and nothing rises above the limb.
         </p>
       )}
-      {config.family !== 4 ? (
+      {config.family !== "composer" ? (
         <button className="primary-button" onClick={onStart}>
           Create a shader family
         </button>

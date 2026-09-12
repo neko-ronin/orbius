@@ -579,6 +579,8 @@ export class Engine {
         uRoughness: c.roughness,
       });
       for (const key of Object.keys(materialDefaults)) {
+        // family is an id, not a number, and has no uniform of its own.
+        if (key === "family") continue;
         const uniform = "u" + key[0].toUpperCase() + key.slice(1);
         this.uniform(
           material,

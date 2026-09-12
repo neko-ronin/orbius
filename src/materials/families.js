@@ -123,16 +123,6 @@ export function familySource(family) {
     .join("");
   return COMMON + declared + "\n" + family.glsl + TAIL(family.kind);
 }
-// Where a compile error's line number has to be shifted back to, to point at the
-// line the author actually wrote.
-export const sourceOffset = (family) =>
-  (
-    COMMON +
-    Object.keys(parseControls(family.glsl).controls)
-      .map(() => "")
-      .join("")
-  ).split("\n").length;
-
 // The built-ins, as records. They are seeds, not special cases: an authored family
 // is the same shape and goes through the same scaffold.
 export const builtins = [

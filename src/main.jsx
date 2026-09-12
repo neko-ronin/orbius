@@ -1389,8 +1389,7 @@ function App() {
                   {config.family && (
                     <p className="family-code-note">
                       This editor is the Custom GLSL surface. Compiling switches
-                      to that family; the built-in material keeps its own
-                      renderer.
+                      to it and leaves the material family you had selected.
                     </p>
                   )}
                   <div className="code-intro">
