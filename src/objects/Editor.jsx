@@ -1,5 +1,7 @@
 import LayerControls from "./LayerControls.jsx";
 import Control from "../studio/Control.jsx";
+import { listProjects, readProject } from "../studio/storage.js";
+import { newFamily, validateFamilies } from "../materials/families.js";
 import { layerDefaults } from "./layers.js";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -83,7 +85,10 @@ export default function ObjectEditor({
   onSimulation,
   tip,
   registry,
+  families,
+  onFamilies,
 }) {
+  const [saved, setSaved] = useState(null);
   const input = useRef(),
     simulationInput = useRef(),
     worker = useRef();
@@ -221,40 +226,100 @@ export default function ObjectEditor({
       },
     );
   }
-  // A saved particle project becomes live contents of this shell: its solver
-  // parameters come across, and the mesh becomes the volume that confines them.
-  async function importSimulation(e) {
+  // Anything saved can come in here. What it becomes depends on what it was: a
+  // particle piece is poured into this shell, an orb shader becomes the shell's
+  // inner shader, another glass composition adds its objects to this scene.
+  async function importSaved(project, label) {
+    if (!current) return;
+    let doc;
+    try {
+      doc = validateProject(project);
+    } catch (err) {
+      setMessage(`Could not read ${label}: ${err.message}`);
+      return;
+    }
+    if (doc.mode === "particles") {
+      const id = current.id;
+      process({ triangles: current.triangles, role: "field" }, (result) => {
+        const conformed = conformSimulation(
+          doc.config,
+          result.interior,
+          current.scale,
+        );
+        onSimulation({
+          container: id,
+          field: result.field,
+          resolution: result.resolution,
+          config: Object.fromEntries(
+            simulationKeys.map((key) => [key, conformed[key]]),
+          ),
+        });
+        notify(`${doc.name} is running inside ${current.name}, fitted to it.`);
+      });
+      return;
+    }
+    if (doc.mode === "orb") {
+      if (!doc.config.family) {
+        setMessage(
+          `${label} uses the custom GLSL surface, which has no family to place inside a shell.`,
+        );
+        return;
+      }
+      let id = doc.config.family;
+      // An authored family has to come with it; a built-in is already here.
+      const carried = (doc.families || []).find((f) => f.id === id);
+      if (carried) {
+        const [copy] = validateFamilies([
+          { ...carried, id: newFamily(carried.kind).id },
+        ]);
+        onFamilies([...(families || []), copy]);
+        id = copy.id;
+      }
+      update("contents", {
+        family: id,
+        scale: current.contents?.scale ?? 0.5,
+        offset: current.contents?.offset ?? [0, 0, 0],
+      });
+      notify(`${doc.name} is inside ${current.name}.`);
+      return;
+    }
+    if (doc.mode === "glass") {
+      const incoming = (doc.objects || []).map((o) => ({
+        ...o,
+        id: crypto.randomUUID(),
+      }));
+      if (!incoming.length) {
+        setMessage(`${label} has no objects to bring in.`);
+        return;
+      }
+      try {
+        validateObjects([...objects, ...incoming]);
+      } catch (err) {
+        setMessage(`Could not add those objects: ${err.message}`);
+        return;
+      }
+      onChange([...objects, ...incoming]);
+      onSelect(incoming[0].id);
+      notify(`Added ${incoming.length} object(s) from ${doc.name}.`);
+      return;
+    }
+    setMessage(
+      `${label} is a ${doc.mode} piece, which has nothing to place in a shell.`,
+    );
+  }
+  async function importFile(e) {
     const file = e.target.files?.[0];
     e.target.value = "";
-    if (!file || !current) return;
+    if (!file) return;
     if (file.size > 96 * 1024 * 1024) {
       setMessage("Project is too large. Maximum file size is 96 MB.");
       return;
     }
-    let saved;
     try {
-      saved = validateProject(JSON.parse(await file.text()));
+      await importSaved(JSON.parse(await file.text()), file.name);
     } catch (err) {
-      setMessage(`Could not read that project: ${err.message}`);
-      return;
+      setMessage(`Could not read that file: ${err.message}`);
     }
-    const id = current.id;
-    process({ triangles: current.triangles, role: "field" }, (result) => {
-      const conformed = conformSimulation(
-        saved.config,
-        result.interior,
-        current.scale,
-      );
-      onSimulation({
-        container: id,
-        field: result.field,
-        resolution: result.resolution,
-        config: Object.fromEntries(
-          simulationKeys.map((key) => [key, conformed[key]]),
-        ),
-      });
-      notify(`${saved.name} is running inside ${current.name}, fitted to it.`);
-    });
   }
   function replaceGeometry(next) {
     validateObjects(next);
@@ -464,18 +529,48 @@ export default function ObjectEditor({
               <button
                 className="primary-button"
                 disabled={busy}
-                onClick={() => simulationInput.current.click()}
+                onClick={async () => {
+                  const items = await listProjects().catch(() => null);
+                  if (items?.length) setSaved(items);
+                  else simulationInput.current.click();
+                }}
               >
-                {particleContainer === current.id
-                  ? "Replace contained simulation"
-                  : "+ Load particle simulation"}
+                + Load a saved creation
               </button>
+              {saved && (
+                <div className="saved-picker">
+                  {saved.map(({ file, label }) => (
+                    <button
+                      key={file}
+                      onClick={async () => {
+                        setSaved(null);
+                        try {
+                          await importSaved(await readProject(file), label);
+                        } catch (err) {
+                          setMessage(`Could not open ${label}: ${err.message}`);
+                        }
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                  <button
+                    className="saves-elsewhere"
+                    onClick={() => {
+                      setSaved(null);
+                      simulationInput.current.click();
+                    }}
+                  >
+                    From a file elsewhere…
+                  </button>
+                </div>
+              )}
               <input
                 ref={simulationInput}
                 type="file"
                 accept=".json,.boast.json"
                 hidden
-                onChange={importSimulation}
+                onChange={importFile}
               />
               {particleContainer === current.id && (
                 <button onClick={() => onSimulation(null)}>
@@ -485,7 +580,7 @@ export default function ObjectEditor({
               <p className="mesh-formats">
                 {particleContainer === current.id
                   ? "A saved particle simulation is running inside this shell. Its solver parameters travel with this project; placed fields do not."
-                  : "Open a saved .boast.json particle project to run its simulation inside this shell."}
+                  : "Anything you have saved becomes what it can be: a particle piece is poured in and fitted to the shell, an orb shader is placed inside it, another glass composition adds its objects."}
               </p>
             </>
           )}

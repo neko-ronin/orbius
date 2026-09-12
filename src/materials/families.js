@@ -291,6 +291,38 @@ export function resolveFamilies(userFamilies = []) {
     [...builtins, ...userFamilies].map((f) => [f.id, f]),
   );
 }
+// A rough measure of how hard a family will make the GPU work per pixel. It is not
+// static analysis and does not pretend to be: it counts the shapes that turn a
+// bounded march into a slow one, so an obviously pathological source can be refused
+// before it reaches a driver. Loop bounds are the scaffold's, so a family cannot
+// make the march longer — only each step of it more expensive, up to 192 times.
+export function complexity(glsl) {
+  const body = glsl.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, "");
+  const count = (re) => (body.match(re) || []).length;
+  // Nesting is the multiplier that matters: work inside a loop inside the march.
+  let depth = 0,
+    deepest = 0;
+  for (const ch of body) {
+    if (ch === "{") deepest = Math.max(deepest, ++depth);
+    else if (ch === "}") depth = Math.max(0, --depth);
+  }
+  return {
+    length: body.length,
+    loops: count(/\b(for|while)\s*\(/g),
+    calls: count(
+      /\b(texture|fbm|noise|pow|exp|sin|cos|normalize|inverse)\s*\(/g,
+    ),
+    depth: deepest,
+  };
+}
+export const COMPLEXITY_LIMITS = { loops: 8, calls: 400, depth: 12 };
+export function tooComplex(glsl) {
+  const c = complexity(glsl);
+  for (const [key, limit] of Object.entries(COMPLEXITY_LIMITS))
+    if (c[key] > limit)
+      return `This family is too heavy to run safely: ${c[key]} ${key} (limit ${limit}). It would stall the GPU rather than render.`;
+  return null;
+}
 export const MAX_FAMILIES = 24;
 export const MAX_GLSL = 20000;
 export function validateFamilies(list) {
@@ -312,6 +344,10 @@ export function validateFamilies(list) {
       f.glsl.length > MAX_GLSL
     )
       throw Error("Invalid shader family.");
+    // A family is executable content. Refuse the obviously pathological before it
+    // reaches a compiler, rather than discovering it by losing the GPU context.
+    const heavy = tooComplex(f.glsl);
+    if (heavy) throw Error(heavy);
     seen.add(f.id);
     return { id: f.id, name: f.name, kind: f.kind, glsl: f.glsl };
   });

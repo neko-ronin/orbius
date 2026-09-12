@@ -2671,3 +2671,31 @@ body.is-scrubbing * {
   border-color: var(--accent);
   color: #fff;
 }
+
+/* What is already saved, offered where the import is asked for. */
+.saved-picker {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #00000030;
+}
+.saved-picker button {
+  text-align: left;
+  padding: 7px 9px;
+  border: 1px solid #ffffff10;
+  border-radius: 4px;
+  background: none;
+  font-size: 11px;
+  color: #d3dcd6;
+}
+.saved-picker button:hover {
+  border-color: var(--accent);
+  color: #fff;
+}
+.saved-picker .saves-elsewhere {
+  border: 0;
+  padding-top: 4px;
+}

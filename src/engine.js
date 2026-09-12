@@ -20,6 +20,10 @@ import {
   orbFragment,
 } from "./shaders.js";
 import { palettes, defaultShader, lightRig } from "./project.js";
+// Milliseconds of shader compilation any one frame may spend before the rest waits.
+// Roughly one frame at 60Hz: enough for several ordinary families, not enough for a
+// pathological one to be compiled twice.
+const COMPILE_BUDGET = 16;
 const rgb = (hex) =>
   [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
 const fieldTypes = ["attract", "repel", "vortex", "light", "burst", "freeze"];
@@ -122,6 +126,13 @@ export class Engine {
     this.familyPrograms ??= new Map();
     const slot = this.familyPrograms.get(family.id);
     if (slot?.source === family.glsl) return slot.program;
+    // Compiling and linking blocks. One family is about a millisecond, but a scene
+    // where several shells each hold a different one would compile all of them in a
+    // single frame, and a deliberately enormous source can take far longer than
+    // that. Spend a budget per frame and let the rest arrive on the next one: a
+    // family appearing a frame late is invisible, a frame that stalls is not.
+    if (this.compileSpent > COMPILE_BUDGET) return slot?.program ?? null;
+    const started = performance.now();
     try {
       const program = this.program(quadVertex, familySource(family));
       if (slot?.program) {
@@ -138,6 +149,8 @@ export class Engine {
       });
       this.familyError = { id: family.id, message: e.message };
       return slot?.program ?? null;
+    } finally {
+      this.compileSpent += performance.now() - started;
     }
   }
   compile(source) {
@@ -458,6 +471,7 @@ export class Engine {
     // family and the custom surface changes which passes run, and a label that
     // stops being produced would otherwise sit in the breakdown reporting a pass
     // that no longer exists.
+    this.compileSpent = 0;
     const timing = `${this.mode}:${c.family ?? ""}`;
     if (this.timedMode !== timing) {
       this.timer.reset();

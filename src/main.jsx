@@ -316,7 +316,13 @@ function App() {
   }
   useEffect(() => {
     try {
-      engine.current = new Engine(canvas.current, setStats, setError);
+      engine.current = new Engine(canvas.current, setStats, (message) => {
+        setError(message);
+        // The message promises the last autosave, and the autosave is debounced by
+        // a second and a half. Write it now so the promise is true for the work
+        // that was on screen when the context went.
+        writeStored("autosave", project()).catch(() => {});
+      });
     } catch (e) {
       setError(e.message);
     }
@@ -1289,6 +1295,11 @@ function App() {
                     onSimulation={onSimulation}
                     tip={tip}
                     registry={registry}
+                    families={families}
+                    onFamilies={(next) => {
+                      setFamilies(next);
+                      setDirty(true);
+                    }}
                   />
                   <button
                     className="object-undo"
