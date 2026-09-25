@@ -130,6 +130,9 @@ before destructive cases, and put it back.
 | PRT-16 | Place a field, then orbit or let autorotate run | The marker and the particles it gathers move with the scene, not the screen |
 | PRT-17 | Field X/Y/Z boxes | Move the field and its marker; refuse to leave ±7 |
 | PRT-18 | Open a project saved before fields had depth | Each field lists as a column and sits where it was drawn |
+| PRT-19 | Drag a marker; Alt-drag a marker | Moves under the pointer at its depth; Alt moves only its height; neither deletes it |
+| PRT-20 | Force tool selected, then Orbit | Plane and axes show while placing and hide for Orbit; drop lines stay |
+| PRT-21 | Vortex or column axis picker | X, Y, Z and the line of sight turn the field; the guide shows the new axis |
 
 ---
 

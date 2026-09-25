@@ -629,6 +629,50 @@ kbd {
   border-radius: 50%;
   background: #0e091d9c;
   box-shadow: 0 0 0 8px #b092ff05;
+  cursor: grab;
+  touch-action: none;
+}
+.field-marker:active {
+  cursor: grabbing;
+}
+/* Depth cues under the markers, drawn in the stage's own -1..1 box. Lines keep
+   one pixel however far the box is stretched. */
+.field-guides {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.field-guides path {
+  fill: none;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.guide-grid {
+  stroke: #b092ff;
+  opacity: 0.13;
+}
+.guide-x {
+  stroke: #ff6b81;
+  opacity: 0.55;
+}
+.guide-y {
+  stroke: #7dffb0;
+  opacity: 0.55;
+}
+.guide-z {
+  stroke: #6bb5ff;
+  opacity: 0.55;
+}
+.guide-drops {
+  stroke: #c0a0ff;
+  opacity: 0.5;
+}
+.guide-columns {
+  stroke: #c0a0ff;
+  opacity: 0.4;
+  stroke-dasharray: 3 4;
 }
 .field-marker span {
   position: absolute;
@@ -2744,4 +2788,21 @@ body.is-scrubbing * {
 .field-position input {
   width: 100%;
   min-width: 0;
+}
+.field-list .field-axis {
+  flex: none;
+  width: 100%;
+  margin-top: 6px;
+  gap: 8px;
+  justify-content: flex-start;
+  white-space: nowrap;
+  color: #7d7188;
+}
+.field-axis select {
+  background: #211a2a;
+  border: 1px solid #45344f;
+  border-radius: 2px;
+  color: inherit;
+  font: 9px monospace;
+  padding: 3px;
 }

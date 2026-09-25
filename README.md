@@ -50,7 +50,7 @@ Each numeric control has an explanation on hover or focus, an example, and a lea
 | `Cmd/Ctrl S` | Save the project |
 | `?` | Field guide |
 
-Keyboard shortcuts are suspended while typing. Fields sit in the scene: a click places one on the plane through the centre facing the camera, and it stays put as you orbit; nearer markers draw larger. Projects saved before fields had depth open with each field as a **column** along the line of sight it was placed from, so it sits where it was drawn. Click a field marker to delete that field. There are at most 12 simultaneous fields. Orb interaction uses camera dragging; particle field markers are hidden there.
+Keyboard shortcuts are suspended while typing. Fields sit in the scene: a click places one on the plane through the centre facing the camera, and it stays put as you orbit; nearer markers draw larger. Drag a marker to move its field across the view at the depth it stands; hold Alt (Option) while dragging to raise or lower it. While a force tool is selected the stage draws the plane through the centre and its axes, and every field drops a line to that plane, so height reads at a glance; a vortex shows the axis it turns about and a column is drawn dashed. Under **Placed fields**, a vortex or column can be turned to X, Y, Z or the line of sight from where the camera is now. Projects saved before fields had depth open with each field as a **column** along the line of sight it was placed from, so it sits where it was drawn. Click a field marker to delete that field. There are at most 12 simultaneous fields. Orb interaction uses camera dragging; particle field markers are hidden there.
 
 ## Save, recover, export
 

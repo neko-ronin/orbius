@@ -42,6 +42,8 @@ import {
   lightKeys,
   viewProject,
   viewUnproject,
+  viewAxis,
+  fieldCoordinate,
   FIELD_EXTENT,
 } from "./project.js";
 import { authorMessage } from "./shaders.js";
@@ -64,6 +66,76 @@ function placeMarker(el, position, view) {
   el.style.top = `${(1 - y) * 50}%`;
   el.style.transform = `translate(-50%, -50%) scale(${Math.min(1.6, Math.max(0.6, view.eye / depth))})`;
   el.hidden = depth < 1;
+}
+// A line through scene points as a path in the guide overlay's -1..1 box. A point
+// behind the eye breaks the line rather than folding it back across the screen.
+function trace(points, view) {
+  let d = "",
+    open = false;
+  for (const p of points) {
+    const [x, y, depth] = viewProject(p, view);
+    if (depth < 1) {
+      open = false;
+      continue;
+    }
+    d += `${open ? "L" : "M"}${x.toFixed(4)} ${(-y).toFixed(4)}`;
+    open = true;
+  }
+  return d;
+}
+const steps = (n, from, to) =>
+  Array.from({ length: n }, (_, i) => from + ((to - from) * i) / (n - 1));
+// The plane the particle disc lies in, through the centre, at half-unit spacing.
+const gridLines = steps(11, -2.5, 2.5).flatMap((a) => [
+  steps(11, -2.5, 2.5).map((b) => [a, 0, b]),
+  steps(11, -2.5, 2.5).map((b) => [b, 0, a]),
+]);
+const ring = steps(9, 0, Math.PI * 2).map((a) => [
+  Math.cos(a) * 0.08,
+  0,
+  Math.sin(a) * 0.08,
+]);
+const axes = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] };
+// Depth cues, redrawn with the markers every frame. The plane and its axes show
+// while placing or dragging; each point field drops a line to the plane with a ring
+// where it lands, a vortex shows the axis it turns about, and a column is drawn
+// as the line it is.
+function drawGuides(svg, fields, view, placing) {
+  if (!svg) return;
+  const path = (name, d) =>
+    svg.querySelector(`.guide-${name}`).setAttribute("d", d);
+  path(
+    "grid",
+    placing ? gridLines.map((line) => trace(line, view)).join("") : "",
+  );
+  for (const [name, axis] of Object.entries(axes))
+    path(name, placing ? trace([[0, 0, 0], axis], view) : "");
+  const along = (f, from, to, n) =>
+    steps(n, from, to).map((t) => f.position.map((v, i) => v + f.axis[i] * t));
+  path(
+    "drops",
+    fields
+      .filter((f) => f.reach === "point")
+      .map((f) => {
+        const [x, y, z] = f.position;
+        return (
+          trace([f.position, [x, 0, z]], view) +
+          trace(
+            ring.map(([u, , w]) => [x + u, 0, z + w]),
+            view,
+          ) +
+          (f.type === "vortex" ? trace(along(f, -0.4, 0.4, 2), view) : "")
+        );
+      })
+      .join(""),
+  );
+  path(
+    "columns",
+    fields
+      .filter((f) => f.reach === "column")
+      .map((f) => trace(along(f, -3, 3, 13), view))
+      .join(""),
+  );
 }
 const sections = {
   particles: [
@@ -279,6 +351,8 @@ function App() {
     noticeTimer = useRef(),
     drag = useRef(),
     markers = useRef(new Map()),
+    guides = useRef(),
+    fieldDrag = useRef(),
     record = useRef(),
     recordTimer = useRef(),
     latest = useRef(),
@@ -338,10 +412,17 @@ function App() {
         writeStored("autosave", project()).catch(() => {});
       });
       engine.current.onFrame = (view) => {
-        for (const f of latest.current.fields) {
+        const { fields, tool } = latest.current;
+        for (const f of fields) {
           const el = markers.current.get(f.id);
           if (el) placeMarker(el, f.position, view);
         }
+        drawGuides(
+          guides.current,
+          fields,
+          view,
+          tool !== "cursor" || !!fieldDrag.current?.moved,
+        );
       };
     } catch (e) {
       setError(e.message);
@@ -761,6 +842,45 @@ function App() {
     setFields((fs) => fs.map((v) => (v.id === id ? { ...v, ...change } : v)));
     setDirty(true);
   }
+  // A marker drags its field across the view at the depth it stands, or up and down
+  // with Alt. Pressing or releasing Alt mid-drag takes hold again from where the
+  // field is, so switching never throws it back to where the drag began.
+  function grabField(e, f, moved) {
+    const view = engine.current?.view;
+    if (!view) return;
+    const [sx, sy, depth] = viewProject(f.position, view);
+    fieldDrag.current = {
+      id: f.id,
+      x: e.clientX,
+      y: e.clientY,
+      sx,
+      sy,
+      z: view.eye - depth,
+      start: f.position,
+      last: f.position,
+      alt: e.altKey,
+      moved,
+    };
+  }
+  function dragField(e) {
+    const d = fieldDrag.current,
+      view = engine.current?.view;
+    if (!d || !view) return;
+    if (!d.moved && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 4) return;
+    // From the drag's own last position: React may not have rendered it yet.
+    if (e.altKey !== d.alt)
+      return grabField(e, { id: d.id, position: d.last }, true);
+    d.moved = true;
+    const rect = canvas.current.getBoundingClientRect();
+    const dx = ((e.clientX - d.x) / rect.width) * 2,
+      dy = ((d.y - e.clientY) / rect.height) * 2;
+    // One screen height at the field's depth, in scene units.
+    const reach = (view.eye - d.z) / (view.zoom * view.projScale);
+    d.last = e.altKey
+      ? d.start.with(1, fieldCoordinate(d.start[1] + dy * reach))
+      : viewUnproject(d.sx + dx, d.sy + dy, view, d.z).position;
+    editField(d.id, { position: d.last });
+  }
   function stageMove(e) {
     if (!drag.current) return;
     update(
@@ -1123,6 +1243,19 @@ function App() {
                     ))}
                   </div>
                 )}
+                {resolved.mode === "particles" && (
+                  <svg
+                    className="field-guides"
+                    ref={guides}
+                    viewBox="-1 -1 2 2"
+                    preserveAspectRatio="none"
+                    aria-hidden="true"
+                  >
+                    {["grid", "x", "y", "z", "drops", "columns"].map((n) => (
+                      <path key={n} className={`guide-${n}`} />
+                    ))}
+                  </svg>
+                )}
                 {(resolved.mode === "particles" ? fields : []).map((f) => (
                   <button
                     className={`field-marker field-${f.type}`}
@@ -1134,10 +1267,19 @@ function App() {
                       return () => markers.current.delete(f.id);
                     }}
                     aria-label={`Remove ${f.type} field`}
-                    title={`Remove ${f.type} · strength ${f.strength.toFixed(1)}`}
-                    onClick={() =>
-                      setFields((fs) => fs.filter((v) => v.id !== f.id))
-                    }
+                    title={`${f.type} · strength ${f.strength.toFixed(1)} · drag to move, Alt-drag for height, click to remove`}
+                    onPointerDown={(e) => {
+                      if (e.button !== 0) return;
+                      e.currentTarget.setPointerCapture(e.pointerId);
+                      grabField(e, f, false);
+                    }}
+                    onPointerMove={dragField}
+                    onPointerCancel={() => (fieldDrag.current = null)}
+                    onClick={() => {
+                      if (!fieldDrag.current?.moved)
+                        setFields((fs) => fs.filter((v) => v.id !== f.id));
+                      fieldDrag.current = null;
+                    }}
                     style={{ "--field-color": f.color }}
                   >
                     <Icon name={f.type} size={15} />
@@ -1508,13 +1650,7 @@ function App() {
                                     editField(f.id, {
                                       position: f.position.with(
                                         i,
-                                        Math.max(
-                                          -FIELD_EXTENT,
-                                          Math.min(
-                                            FIELD_EXTENT,
-                                            +e.target.value,
-                                          ),
-                                        ),
+                                        fieldCoordinate(+e.target.value),
                                       ),
                                     });
                                 }}
@@ -1522,6 +1658,36 @@ function App() {
                             </label>
                           ))}
                         </div>
+                        {(f.type === "vortex" || f.reach === "column") && (
+                          <label className="field-axis">
+                            {f.reach === "column"
+                              ? "runs along"
+                              : "turns about"}
+                            <select
+                              aria-label={`${f.type} axis`}
+                              value={
+                                Object.keys(axes).find((k) =>
+                                  axes[k].every((v, i) => v === f.axis[i]),
+                                ) ?? "placed"
+                              }
+                              onChange={(e) =>
+                                editField(f.id, {
+                                  axis:
+                                    axes[e.target.value] ??
+                                    viewAxis(f.position, engine.current.view),
+                                })
+                              }
+                            >
+                              <option value="placed">its line of sight</option>
+                              <option value="camera">
+                                the line of sight from here
+                              </option>
+                              <option value="x">X</option>
+                              <option value="y">Y</option>
+                              <option value="z">Z</option>
+                            </select>
+                          </label>
+                        )}
                       </div>
                     ))
                   ) : (
@@ -1795,7 +1961,8 @@ function App() {
                 <small>
                   Shift + click doubles force. Scroll to zoom.
                   <br />
-                  Click a field marker to remove it. X clears all.
+                  Drag a field marker to move it, Alt-drag to raise or lower it,
+                  click it to remove it. X clears all.
                 </small>
               </div>
               <div>

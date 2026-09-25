@@ -12,6 +12,8 @@ import {
   lightRig,
   lightRoles,
   viewProject,
+  viewUnproject,
+  viewAxis,
   particleView,
 } from "./project.js";
 import { newObject, innerLook } from "./objects/model.js";
@@ -86,6 +88,28 @@ test("a field saved as a screen point becomes a column where that camera looked"
     validateProject(JSON.parse(JSON.stringify(validateProject(p)))).fields,
     [f],
   );
+});
+test("a field dragged at any depth lands under the pointer and keeps that depth", () => {
+  const view = {
+    ...particleView,
+    rotation: -0.7,
+    tilt: 0.9,
+    zoom: 1.3,
+    aspect: 1.7,
+  };
+  for (const z of [-2, 0, 1.5]) {
+    const { position } = viewUnproject(-0.4, 0.25, view, z);
+    const [sx, sy, depth] = viewProject(position, view);
+    assert.ok(Math.abs(sx + 0.4) < 0.01 && Math.abs(sy - 0.25) < 0.01);
+    assert.ok(Math.abs(depth - (view.eye - z)) < 0.02);
+    // Its line to the eye covers one point on screen: the axis faces the camera.
+    const axis = viewAxis(position, view);
+    const [ax, ay] = viewProject(
+      position.map((v, i) => v + axis[i]),
+      view,
+    );
+    assert.ok(Math.abs(ax - sx) < 1e-6 && Math.abs(ay - sy) < 1e-6);
+  }
 });
 test("a project saved before the rename to Orbius still opens", () => {
   assert.equal(

@@ -858,10 +858,7 @@ export function conformFields(fields, config, conformed) {
   const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
   return fields.map((f) => ({
     ...f,
-    position: f.position.map(
-      (v) =>
-        Math.round(clamp(v * ratio, -FIELD_EXTENT, FIELD_EXTENT) * 100) / 100,
-    ),
+    position: f.position.map((v) => fieldCoordinate(v * ratio)),
     radius: clamp(f.radius * ratio, 0.1, 6),
     strength: clamp(f.strength * ratio, 0, 12),
   }));
@@ -877,6 +874,10 @@ export const fieldTypes = [
 // A particle that strays this far from home is reborn, so a field placed further
 // out would act on nothing.
 export const FIELD_EXTENT = 7;
+// Where a field may stand along one axis, kept to hundredths: finer than a
+// particle, and it reads cleanly in the list.
+export const fieldCoordinate = (v) =>
+  Math.round(Math.max(-FIELD_EXTENT, Math.min(FIELD_EXTENT, v)) * 100) / 100;
 // The particle workspace's camera, which the shaders take as uEye and uProjScale.
 export const particleView = { eye: 4.5, projScale: 2 };
 // The camera the shaders build: yaw about Y, then tilt about X, the eye on +z
@@ -902,27 +903,30 @@ export function viewProject(p, view) {
   const k = (view.projScale * view.zoom) / Math.max(1, depth);
   return [(x * k) / view.aspect, y * k, depth];
 }
-// A screen point put into the scene: on the plane through the origin that faces
-// the camera, with an axis running from it back to the eye. The position is kept
-// to hundredths, which is finer than a particle and reads cleanly in the list.
-export function viewUnproject(sx, sy, view) {
+// Camera space back to the scene: a rotation's transpose is its inverse.
+function toWorld(view, v) {
   const rows = cameraRows(view);
-  // A rotation's transpose is its inverse: camera space back to world.
-  const world = (v) =>
-    [0, 1, 2].map(
-      (i) => rows[0][i] * v[0] + rows[1][i] * v[1] + rows[2][i] * v[2],
-    );
-  const k = view.eye / (view.zoom * view.projScale);
+  return [0, 1, 2].map(
+    (i) => rows[0][i] * v[0] + rows[1][i] * v[1] + rows[2][i] * v[2],
+  );
+}
+const unit = (v) => v.map((n) => n / Math.hypot(...v));
+// A screen point put into the scene, on the plane facing the camera at camera
+// depth z (through the origin unless told otherwise), with an axis running from it
+// back to the eye.
+export function viewUnproject(sx, sy, view, z = 0) {
+  const k = (view.eye - z) / (view.zoom * view.projScale);
   const [x, y] = [sx * view.aspect * k, sy * k];
-  const length = Math.hypot(x, y, view.eye);
   return {
-    position: world([x, y, 0]).map(
-      (v) =>
-        Math.round(Math.max(-FIELD_EXTENT, Math.min(FIELD_EXTENT, v)) * 100) /
-        100,
-    ),
-    axis: world([-x / length, -y / length, view.eye / length]),
+    position: toWorld(view, [x, y, z]).map(fieldCoordinate),
+    axis: toWorld(view, unit([-x, -y, view.eye - z])),
   };
+}
+// From a point in the scene towards the eye: the axis of a field that faces the
+// camera from where it stands.
+export function viewAxis(p, view) {
+  const eye = toWorld(view, [0, 0, view.eye]);
+  return unit(eye.map((e, i) => e - p[i]));
 }
 // Fields were screen points before they had depth. The solver pulled toward the ray
 // through that point at every depth, which is a column along the line of sight, so
