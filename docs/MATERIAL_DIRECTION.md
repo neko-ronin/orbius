@@ -156,7 +156,7 @@ This remains an artistic screen-space approximation. A shell bends what is behin
 
 In Orb shaders, **Create a shader family** opens a bounded volume-field composer. The author selects two fields (interwoven sheets, concentric ripples, noise contours, crossing waves), then morphs, layers, intersects, or carves their densities. Independent frequency, offset, influence, ribbon width, color travel, domain folding, motion, scale and radiance make it a parameterized construction system rather than just a list of presets.
 
-The stage previews edits immediately. **Collect family** stores the construction and an actual rendered portrait. **Save** writes the ordinary portable BOAST project. **Export GLSL bundle** exports a texture-free WebGL2 fullscreen vertex/fragment pair, explicit uniform values, configuration and integration contract. The export specializes the family path and excludes the built-in chemistry/silk/mercury branches. It is an integration artifact; use the normal project format to reopen in BOAST.
+The stage previews edits immediately. **Collect family** stores the construction and an actual rendered portrait. **Save** writes the ordinary portable ORBIUS project. **Export GLSL bundle** exports a texture-free WebGL2 fullscreen vertex/fragment pair, explicit uniform values, configuration and integration contract. The export specializes the family path and excludes the built-in chemistry/silk/mercury branches. It is an integration artifact; use the normal project format to reopen in ORBIUS.
 
 Scope: volumetric orb materials. It is not an arbitrary shader graph, AI shader generation system, surface BRDF editor, or geometry editor. Noise-heavy combinations can be dense and expensive; the author should preserve negative space. Technical checks are not a substitute for the user's aesthetic acceptance.
 
@@ -269,6 +269,6 @@ composite, not any of the glass work.
 - Browser exercised primitive creation, worker generation, keyboard adjustment of sheet count, rebuilding, collection save/reload (seven sheets and billow retained), and shader family composition/collection reload.
 - Browser rendering matrix: four field compositions; exported GLSL compile/render; cylinder and sphere strata; frosted/dispersion variant; RGBA8 optical-target fallback. All produced lit output with zero WebGL errors.
 - Visual checks included development view and show view. The new result has legible particle strata and a much stronger glass outline. It is not asserted to match the reference's cinematic optics, internal depth richness, or fine fluid motion.
-- Local reproducible render matrix: `output/studio-qa/index.html` (ignored development artifact). Research contact sheet: `/tmp/boast-topography.jpg` (temporary).
+- Local reproducible render matrix: `output/studio-qa/index.html` (ignored development artifact). Research contact sheet: `/tmp/orbius-topography.jpg` (temporary).
 
 Next quality gates: compare glass and interior at matching camera/scale to the clip; test high-concavity imported shells; improve multi-object transmission ordering; offer art-directed lighting environments; expand procedural layer fields only after the current ones prove useful in the user's hands.

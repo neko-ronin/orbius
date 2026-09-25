@@ -127,10 +127,8 @@ kbd {
   letter-spacing: -1.3px;
 }
 .brand-mark {
-  color: var(--accent);
-  font-size: 38px;
-  line-height: 1;
-  font-weight: 400;
+  width: 42px;
+  height: 42px;
 }
 .brand-divider {
   width: 1px;
@@ -1752,7 +1750,8 @@ input[type="color"] {
     font-size: 22px;
   }
   .brand-mark {
-    font-size: 31px;
+    width: 34px;
+    height: 34px;
   }
   .stage-top-right {
     display: none;
@@ -1961,9 +1960,6 @@ input[type="color"] {
 }
 .topbar {
   background: #0e1110;
-}
-.brand-mark {
-  color: #c5dec5;
 }
 .brand small {
   letter-spacing: 0.15em;

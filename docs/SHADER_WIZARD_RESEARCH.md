@@ -1,7 +1,7 @@
 # Authoring shader families in-app — research
 
 The goal: stop hand-coding families into the renderer. A family should be something
-a user builds, saves, and shares from inside BOAST, with dragging and composing for
+a user builds, saves, and shares from inside ORBIUS, with dragging and composing for
 the parts that suit it and raw GLSL for the parts that do not.
 
 ## 1. What actually blocks it today
@@ -21,7 +21,7 @@ where `field` is a switch over four hardcoded functions. Sixteen combinations an
 some continuous parameters. That is a **preset space**, and a preset space is
 exactly the thing that runs out.
 
-## 2. What BOAST already has
+## 2. What ORBIUS already has
 
 More than it looks like. An honest inventory, because the cheapest wizard is the
 one that mostly already exists.
@@ -50,7 +50,7 @@ terms]`, now shared by every panel through `Control.jsx`. A family that could
 persistence, and field notes with no code changes anywhere.
 
 **An export contract.** `exportFamily()` already emits a self-contained
-`boast-shader-family` bundle: vertex, fragment, uniforms, and a written integration
+`orbius-shader-family` bundle: vertex, fragment, uniforms, and a written integration
 contract. Authoring is the missing inverse of an export that already works.
 
 **A validation and persistence spine.** `validateProject` already refuses malformed
@@ -75,7 +75,7 @@ connecting them **generates one combined shader** rather than rendering an image
 node ([Material Maker](https://rodzilla.itch.io/material-maker)). New nodes can be
 made by grouping existing ones *or by writing GLSL directly*.
 
-For BOAST the second model is the only viable one — one program, one pass, real
+For ORBIUS the second model is the only viable one — one program, one pass, real
 time — and it has a pleasant consequence: **the graph is a code generator, so the
 graph and the code are the same artifact seen two ways.**
 
@@ -101,7 +101,7 @@ uniforms and shows contextual widgets for them
 ([ShaderBox](https://where-is-your-keyboard.itch.io/shaderbox/devlog/987247/shaderbox-interactive-glsl-shaders-editor)).
 The shader is the single source of truth for its own parameters.
 
-BOAST is unusually ready for this because the control tuple already exists. A header
+ORBIUS is unusually ready for this because the control tuple already exists. A header
 comment is enough:
 
 ```glsl
@@ -127,7 +127,7 @@ pick parents to recombine
 ([arXiv 2312.17587](https://arxiv.org/abs/2312.17587)), following Picbreeder. Newer
 work puts an LLM in the mutation operator ([arXiv 2512.08951](https://arxiv.org/html/2512.08951v1)).
 
-Worth taking seriously here for a specific reason: **BOAST already has a
+Worth taking seriously here for a specific reason: **ORBIUS already has a
 collection**. "Collect family" saves an editable family with a rendered portrait. A
 grid of nine mutations with a Keep button is a small step from a gallery that
 exists, and it answers the question a parameter space is actually bad at — *what is

@@ -83,7 +83,7 @@ and the flushed autosave matched what was on screen.
 authored control's own note and its search link, closes on leave and on `Esc`),
 UXS-10 (backdrop click and `Esc` both close a modal), UXS-05.
 
-**Boundaries** — SEC-01 (a request without `x-boast` falls through to the
+**Boundaries** — SEC-01 (a request without `x-orbius` falls through to the
 application, never to data), SEC-02 (`{"error":"origin"}` for a foreign origin),
 SEC-04 (`..%2F..%2Fpwned` landed at `saves/state/pwned.json` — confined, then
 removed), SEC-05, SEC-06 (a non-JSON body is refused and nothing is written),
@@ -172,7 +172,7 @@ Under `output/playwright/`, excluded from git: particle authoring and show views
 orb show and studio views; node composer; mobile; a 4K export verified at
 **3840 × 2560**; a recording verified by ffprobe as **VP9, 2160 × 1440, 30 fps**,
 about 1.53 MB. MediaRecorder WebM may omit duration metadata. The round-trip project
-fixture is `roundtrip.boast.json`.
+fixture is `roundtrip.orbius.json`.
 
 The default 80,000-particle development scene showed about 60 FPS on that host — an
 observation, not a benchmark or a show-mode guarantee.

@@ -14,7 +14,7 @@ import {
 import { newObject, innerLook } from "./objects/model.js";
 import { newFamily, builtins } from "./materials/families.js";
 const fixture = () => ({
-  format: "boast-project",
+  format: "orbius-project",
   version: 1,
   name: "Round trip",
   mode: "particles",
@@ -39,6 +39,12 @@ test("a saved project round trips every parameter and connected graph", () => {
     },
   ];
   assert.deepEqual(validateProject(JSON.parse(JSON.stringify(p))), p);
+});
+test("a project saved before the rename to Orbius still opens", () => {
+  assert.equal(
+    validateProject({ ...fixture(), format: "boast-project" }).format,
+    "orbius-project",
+  );
 });
 test("untrusted project rejects missing format, versions, NaN, infinite values and out-of-range data", () => {
   for (const change of [

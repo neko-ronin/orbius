@@ -48,7 +48,7 @@ gzip -9.
 | Shiki (highlight only) | **45** | **+105%** | ~90 KB+ | — | none |
 | Monaco + @monaco-editor/react | 10 | +23% | **megabytes** | — | **2** |
 
-Two rows settle themselves. **Shiki** adds more packages than BOAST's entire current
+Two rows settle themselves. **Shiki** adds more packages than ORBIUS's entire current
 tree to do highlighting alone. **Monaco** unpacks to 95.6 MB and is the only
 candidate shipping known vulnerabilities today.
 
@@ -72,7 +72,7 @@ advisories — [GHSA-c2j3-45gr-mqc4](https://github.com/advisories/GHSA-c2j3-45g
 sanitizer-bypass leading to XSS. npm's suggested remediation is to **downgrade to
 0.53.0**, a semver-major move backwards. There is no forward fix.
 
-Monaco uses dompurify to render markdown in hovers and suggestions. In BOAST the
+Monaco uses dompurify to render markdown in hovers and suggestions. In ORBIUS the
 plausible path is an imported family whose doc comments reach a hover. That is
 indirect and speculative — but it is a live XSS primitive sitting inside an editor
 whose entire job here is to display untrusted-ish text, and the fix direction is
@@ -122,14 +122,14 @@ can be linear.
 
 ## 5. Reliability findings
 
-**Monaco does not support mobile.** BOAST's validation record includes "mobile
+**Monaco does not support mobile.** ORBIUS's validation record includes "mobile
 layout does not overflow the viewport horizontally," and `style.css` carries mobile
 breakpoints. Adopting Monaco means dropping a supported target, or shipping two
 editors. That alone disqualifies it independently of the security finding.
 
 **Monaco needs build configuration.** Web workers, and in practice a Vite plugin —
 a build-tool dependency on top of the runtime one, and a standing source of
-breakage on every Vite major. BOAST currently has exactly one devDependency.
+breakage on every Vite major. ORBIUS currently has exactly one devDependency.
 
 **CodeJar is `contenteditable`.** That buys 4 KB and costs the well-known
 contenteditable problems: IME composition, and native undo fighting a controlled

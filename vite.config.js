@@ -59,7 +59,7 @@ function readBody(req) {
 // localhost. Three things stand in the way:
 //
 //   1. It exists only while serving. `apply: "serve"` keeps it out of every build.
-//   2. Every request must carry `x-boast`. Setting a custom header forces a CORS
+//   2. Every request must carry `x-orbius`. Setting a custom header forces a CORS
 //      preflight, and `server.cors` below answers one only for this dev server's own
 //      origins, so a foreign page never gets to send the real request. A simple form
 //      post, which needs no preflight, cannot set the header at all.
@@ -72,9 +72,9 @@ function readBody(req) {
 //
 // Confinement is separate from all three: names are rebuilt from `[a-z0-9-]`, the
 // area is chosen from a fixed map, and the extension is fixed.
-function boastSaves() {
+function orbiusSaves() {
   return {
-    name: "boast-saves",
+    name: "orbius-saves",
     apply: "serve",
     configureServer(server) {
       const origins = new Set(
@@ -83,13 +83,13 @@ function boastSaves() {
           `http://localhost:${p}`,
         ]),
       );
-      server.middlewares.use("/__boast", async (req, res, next) => {
+      server.middlewares.use("/__orbius", async (req, res, next) => {
         const send = (code, body) => {
           res.statusCode = code;
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify(body));
         };
-        if (req.headers["x-boast"] !== "1") return next();
+        if (req.headers["x-orbius"] !== "1") return next();
         const origin = req.headers.origin;
         if (origin && !origins.has(origin))
           return send(403, { error: "origin" });
@@ -161,7 +161,7 @@ const DEV_ORIGINS = [5173, 4173].flatMap((p) => [
   `http://localhost:${p}`,
 ]);
 export default defineConfig({
-  plugins: [boastSaves()],
+  plugins: [orbiusSaves()],
   // Pinned rather than left to the default, because the save endpoint's first line of
   // defence is that a foreign page cannot pass its preflight.
   server: { cors: { origin: DEV_ORIGINS } },

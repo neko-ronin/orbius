@@ -2,7 +2,7 @@
 
 Prepared 8 September 2026. Standalone handoff for an implementation agent and an independent workflow experiment.
 
-**Status: design brief, not an instruction to begin implementation.** The client is choosing priorities and scope. Requirements below express the intended experience; proposed techniques and unconfirmed decisions are explicitly marked. This document deliberately does not depend on BOAST's current architecture. See the separate gap analysis for that comparison.
+**Status: design brief, not an instruction to begin implementation.** The client is choosing priorities and scope. Requirements below express the intended experience; proposed techniques and unconfirmed decisions are explicitly marked. This document deliberately does not depend on ORBIUS's current architecture. See the separate gap analysis for that comparison.
 
 ## Assignment
 

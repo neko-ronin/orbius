@@ -97,7 +97,7 @@ test("embedded geometry and independent object treatments survive portable proje
       position: [0, 0.1, 0],
     };
   const project = {
-    format: "boast-project",
+    format: "orbius-project",
     version: 1,
     name: "Imported composition",
     mode: "glass",

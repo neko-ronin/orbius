@@ -1,4 +1,4 @@
-# BOAST — test plan
+# ORBIUS — test plan
 
 What to check. Every workspace, flow, control, and state the application can be in,
 written so that someone who has never opened it — a person or an agent — can work
@@ -284,7 +284,7 @@ before destructive cases, and put it back.
 | SAV-08 | Reload with an autosave present | Recovery banner names the piece; `Restore` reinstates it |
 | SAV-09 | Dismiss the banner | It stays dismissed for that session |
 | SAV-10 | Recovery banner accuracy | It never offers work older than what was on screen |
-| SAV-11 | Open a project file that is not a BOAST project | Refused with a reason; the current scene survives |
+| SAV-11 | Open a project file that is not a ORBIUS project | Refused with a reason; the current scene survives |
 | SAV-12 | Open a project from an older version (integer family id) | Migrates and renders |
 | SAV-13 | Open a project naming a family it does not carry | Refused, or the reference is dropped — never a broken render |
 | SAV-14 | A file over the 96 MB limit | Refused with the size named, not a network error |
@@ -390,7 +390,7 @@ being a local file-write primitive for any page in the browser.
 
 | ID | Check | Expect |
 |---|---|---|
-| SEC-01 | Request without the `x-boast` header | Not served |
+| SEC-01 | Request without the `x-orbius` header | Not served |
 | SEC-02 | Request with a foreign `Origin` | Refused |
 | SEC-03 | Cross-origin request from another page | Blocked at the preflight |
 | SEC-04 | A name containing `../`, a separator or an absolute path | Confined; the file lands inside `saves/<area>` or is refused |

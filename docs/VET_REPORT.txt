@@ -1,4 +1,4 @@
-=== VET REPORT: BOAST dependencies (react/react, vitejs/vite; temporary prettier/prettier) ===
+=== VET REPORT: ORBIUS dependencies (react/react, vitejs/vite; temporary prettier/prettier) ===
 
 Review date: 2026-09-08.
 Scope: exact npm release artifacts react 19.2.8, react-dom 19.2.8, vite 8.2.2;
@@ -28,7 +28,7 @@ parent VET_REPO.md procedure were considered. Unavailable evidence is stated.
    possible prompt injection is absent. External content was treated as data.
    No project-local .pi/.prime/.claude/.cursor agent configuration, SYSTEM.md,
    APPEND_SYSTEM.md, or AGENTS.md was found in the reviewed release artifacts.
-   BOAST does not load executable agent extensions or scripts from project files.
+   ORBIUS does not load executable agent extensions or scripts from project files.
 
    AMBER | Vite can execute trusted project JavaScript/configuration at build
    or development time. Its evalValue helper evaluates static worker/glob
@@ -57,7 +57,7 @@ parent VET_REPO.md procedure were considered. Unavailable evidence is stated.
    Telemetry: no telemetry/event-sending mechanism identified in the reviewed
    direct release artifacts. Therefore no telemetry endpoint, event fields,
    default collection state, or opt-out applies to the authored app.
-   BOAST's runtime makes no external requests. Fonts, icons and graphics are
+   ORBIUS's runtime makes no external requests. Fonts, icons and graphics are
    local/procedural. Learning links navigate to Google only when clicked.
    Local autosave stays in browser storage; JSON/GLSL/image/video exports stay
    in downloads. Vite's development HMR connection is local.
@@ -71,7 +71,7 @@ parent VET_REPO.md procedure were considered. Unavailable evidence is stated.
 
    Advisory/news review:
    - React Server Components had RCE and later denial-of-service advisories.
-     BOAST uses client React/React DOM 19.2.8 and has no RSC dependency/server.
+     ORBIUS uses client React/React DOM 19.2.8 and has no RSC dependency/server.
      Official source: https://react.dev/blog/2025/12/03/critical-security-vulnerability-in-react-server-components
    - Vite has published development-server file-access advisories. The current
      official pinned 8.2.2 tree reports no known vulnerabilities in npm audit.
@@ -79,7 +79,7 @@ parent VET_REPO.md procedure were considered. Unavailable evidence is stated.
      Official source: https://github.com/vitejs/vite/security/advisories?state=published
    - A verified 2025 malware incident affected eslint-config-prettier,
      eslint-plugin-prettier and related packages, not this direct formatter
-     package. None of those integration packages is installed for BOAST.
+     package. None of those integration packages is installed for ORBIUS.
      Source: https://github.com/advisories/GHSA-f29h-pxvx-f335
    - Searches surfaced secondary claims about Vite-namespace impersonation;
      this review did not establish primary evidence tying those claims to
@@ -122,7 +122,7 @@ parent VET_REPO.md procedure were considered. Unavailable evidence is stated.
 5. CODE QUALITY
    Clean separation: project schema/metadata, WebGL ownership, GLSL programs,
    node interaction, and React studio UI. No general-purpose framework was
-   created around the renderer. No JavaScript eval in BOAST source.
+   created around the renderer. No JavaScript eval in ORBIUS source.
    Eight meaningful unit checks cover file round trips, range/schema errors,
    graph topology, disconnected effects, shader drafts and duplicate IDs.
    Production build succeeds. Real-browser checks cover the key UI paths;

@@ -845,8 +845,12 @@ export function validateProject(data) {
   // that names a family is checked against them.
   const families = validateFamilies(data?.families);
   const registry = resolveFamilies(families);
-  if (!data || data.format !== "boast-project" || data.version !== 1)
-    throw Error("This is not a supported BOAST project (version 1).");
+  // "boast-project" is what files saved before the rename to Orbius carry.
+  if (
+    !["orbius-project", "boast-project"].includes(data?.format) ||
+    data.version !== 1
+  )
+    throw Error("This is not a supported ORBIUS project (version 1).");
   if (!["particles", "orb", "glass", "nodes"].includes(data.mode))
     throw Error("Unknown workspace.");
   const config = { ...defaults };
@@ -1019,7 +1023,7 @@ export function validateProject(data) {
       : o,
   );
   return {
-    format: "boast-project",
+    format: "orbius-project",
     version: 1,
     name:
       typeof data.name === "string"

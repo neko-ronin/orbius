@@ -424,7 +424,7 @@ function App() {
   function project() {
     const s = latest.current;
     return {
-      format: "boast-project",
+      format: "orbius-project",
       version: 1,
       name: s.name,
       mode: s.mode,
@@ -547,7 +547,7 @@ function App() {
     }
     download(
       new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
-      `${file}.boast.json`,
+      `${file}.orbius.json`,
     );
     setDirty(false);
     notify("Project saved to your downloads.");
@@ -592,7 +592,7 @@ function App() {
   async function capture() {
     try {
       const blob = await engine.current.capture();
-      download(blob, `boast-${Date.now()}.png`);
+      download(blob, `orbius-${Date.now()}.png`);
       notify("High-resolution PNG saved.");
     } catch (e) {
       notify(e.message);
@@ -634,7 +634,7 @@ function App() {
         setRecording(false);
         download(
           new Blob(chunks, { type: mime }),
-          `boast-${Date.now()}.${mime.includes("mp4") ? "mp4" : "webm"}`,
+          `orbius-${Date.now()}.${mime.includes("mp4") ? "mp4" : "webm"}`,
         );
         notify("Recording saved.");
       };
@@ -895,19 +895,21 @@ function App() {
           href="#"
           onClick={(e) => {
             e.preventDefault();
-            notify("BOAST · Light laboratory");
+            notify("ORBIUS · Light laboratory");
           }}
         >
-          <span className="brand-mark">✳</span>BOAST
+          <img className="brand-mark" src="/favicon.svg" alt="" />
+          ORBIUS
           <span className="brand-divider" />
           <small>LIGHT LABORATORY</small>
         </a>
         <nav aria-label="Workspaces">
+          {/* The node composer is left out until it is mature enough to feature;
+              its workspace still works for a project saved in it. */}
           {[
             ["particles", "Particle playground", "particles"],
             ["orb", "Orb shaders", "orb"],
             ["glass", "Glass objects", "orb"],
-            ["nodes", "Node composer", "nodes"],
           ].map(([m, label, icon]) => (
             <button
               key={m}
@@ -946,7 +948,7 @@ function App() {
             }}
           >
             <Icon name="play" size={14} />
-            Show mode<kbd>S</kbd>
+            Orbin time<kbd>S</kbd>
           </button>
         </div>
       </header>
@@ -1612,7 +1614,7 @@ function App() {
       </footer>
       <input
         type="file"
-        accept=".json,.boast.json,application/json"
+        accept=".json,.orbius.json,application/json"
         ref={file}
         onChange={load}
         hidden
@@ -1717,7 +1719,7 @@ function App() {
             >
               <Icon name="close" />
             </button>
-            <span className="eyebrow">THE BOAST FIELD GUIDE</span>
+            <span className="eyebrow">THE ORBIUS FIELD GUIDE</span>
             <h1>Play is the whole point.</h1>
             <p>Choose a scene. Bend its physics. Make it yours.</p>
             <div className="guide-grid">
@@ -1758,7 +1760,7 @@ function App() {
               </div>
             </div>
             <div className="guide-bottom">
-              <h3>Four ways to make something extraordinary.</h3>
+              <h3>Three ways to make something extraordinary.</h3>
               <p>
                 <b>Particles</b> · Sculpt a living cloud with forces and light.
                 <br />
@@ -1767,10 +1769,6 @@ function App() {
                 <br />
                 <b>Glass objects</b> · Import OBJ or STL meshes and combine
                 independent glass shells, surface dots, and filled dot volumes.
-                <br />
-                <b>Node composer</b> · Connect a source through motion, color,
-                and bloom to the output. Disconnected nodes don’t affect the
-                scene.
               </p>
               <p>
                 Projects are saved as portable JSON files. A local autosave

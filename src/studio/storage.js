@@ -2,12 +2,12 @@
 // so they survive a cleared browser profile and can be read, diffed and grepped like
 // anything else in the tree. IndexedDB stays as the fallback for a built copy, where
 // no dev server exists to write files.
-const API = "/__boast";
+const API = "/__orbius";
 const part = (name) => encodeURIComponent(name);
 let disk;
 async function onDisk() {
   if (disk === undefined)
-    disk = await fetch(`${API}/ping`, { headers: { "x-boast": "1" } })
+    disk = await fetch(`${API}/ping`, { headers: { "x-orbius": "1" } })
       .then((r) => r.ok)
       .catch(() => false);
   return disk;
@@ -19,7 +19,7 @@ async function writeState(key, value) {
 async function call(method, area, name, body) {
   const r = await fetch(`${API}/${area}${name ? `/${part(name)}` : ""}`, {
     method,
-    headers: { "x-boast": "1", "Content-Type": "application/json" },
+    headers: { "x-orbius": "1", "Content-Type": "application/json" },
     body,
   });
   if (!r.ok)
@@ -60,6 +60,8 @@ export async function deleteProject(name) {
   if (await onDisk()) await call("DELETE", "projects", name);
 }
 // Structured storage keeps embedded meshes out of localStorage's small string quota.
+// This name and the localStorage keys below predate the rename to Orbius. They stay,
+// because renaming them would orphan everything a browser already holds.
 let database;
 function open() {
   if (!database)

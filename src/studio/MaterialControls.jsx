@@ -65,7 +65,7 @@ export default function MaterialControls({
     );
     const a = document.createElement("a");
     a.href = url;
-    a.download = "boast-shader-family.json";
+    a.download = "orbius-shader-family.json";
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }

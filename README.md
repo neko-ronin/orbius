@@ -1,4 +1,4 @@
-# BOAST — Light laboratory
+# ORBIUS — Light laboratory
 
 A local-first visual instrument built with React and WebGL 2. No account, backend, API keys, or external assets are required.
 
@@ -25,8 +25,8 @@ npm run preview
 
 A glass shell can hold one. **Inner shader** on a glass object renders a family inside it, at a size and offset you choose, through the enclosure's own camera — so it is refracted, absorbed and occluded like anything else in there. Solar cartography at 0.4 inside a clear orb is a sun under glass. **Enclosure** in the orb workspace turns off a volume family's own bounding sphere, which is what makes it a body of light rather than an object in a second ball.
 - **Glass objects** composes enclosures and their contents as separate objects. Add a glass orb or cylinder, or import an OBJ/STL mesh, then give it a **Glass container**, **Surface dots**, **Filled volume dots**, or **Procedural strata** material. An orb can be **smooth, geodesic, icosahedral, dodecahedral, octahedral or cubic**, a cylinder can have anywhere from five to sixty-four sides, and either can be **hollow** with a wall thickness — all chosen before you add it, since the mesh is baked at that moment. Four optical finishes (Clear, Frosted, Prism, Smoked) set IOR, roughness, thickness, dispersion, absorption, density, studio brightness, and the two defect controls together; the individual controls stay available. **Surface defects** adds forming waviness, orange peel, a scratch field, and uneven wall thickness; **Bubbles & seeds** suspends inclusions in the body at depth. Both are seeded from the object, so a vessel keeps its own flaws and a duplicate gets its own. **Studio backdrop** under Studio & finish draws the sweep the glass refracts and reflects — set it to zero for black-space compositions.
-- **Contained simulations** run a saved particle project inside a glass shell. Select a shell, choose **Load a saved creation**, and pick a `.boast.json` particle project: its solver parameters transfer, its particles are confined to the mesh interior by a voxel occupancy field, and the glass refracts them. The project is re-authored against the enclosure's measured interior rather than loaded verbatim — a simulation built for an open stage becomes uniform fog once walled in — and its particles accumulate into their own trail buffer, where a saved project's filaments and most of its brightness live. Placed fields do not transfer.
-- **Node composer** connects a particle or orb source through curl, spiral warp, color grade, and bloom to one stage output. Drag cards to arrange them. Click an output port and then an input port to wire them. Click a wire to disconnect. Only the chain reaching the output affects rendering; disconnected output renders an empty stage. Cycles and multiple input connections are rejected. Up to 24 nodes.
+- **Contained simulations** run a saved particle project inside a glass shell. Select a shell, choose **Load a saved creation**, and pick a `.orbius.json` particle project: its solver parameters transfer, its particles are confined to the mesh interior by a voxel occupancy field, and the glass refracts them. The project is re-authored against the enclosure's measured interior rather than loaded verbatim — a simulation built for an open stage becomes uniform fog once walled in — and its particles accumulate into their own trail buffer, where a saved project's filaments and most of its brightness live. Placed fields do not transfer.
+- **Node composer** is hidden from navigation until it is mature enough to feature. Its code stays in `src/NodeEditor.jsx`, and a project saved in that workspace still opens into it. It connects a particle or orb source through curl, spiral warp, color grade, and bloom to one stage output. Drag cards to arrange them. Click an output port and then an input port to wire them. Click a wire to disconnect. Only the chain reaching the output affects rendering; disconnected output renders an empty stage. Cycles and multiple input connections are rejected. Up to 24 nodes.
 - **Show mode** hides the studio UI and increases resolution from 70% to 150% by default. Both scales are adjustable. Orb primary rays use 80 steps in development and 192 in show mode; secondary rays and shadow samples also increase. Rendering is capped at 3840 px on the longer edge and at the GPU texture limit. Exit with `S`, `Escape`, or the top-right control (revealed on hover/focus; faintly visible on touch devices).
 
 Each numeric control has an explanation on hover or focus, an example, and a learning-search link. Expand the inspector sections to reach all parameters. Light color affects newly placed lights. The interaction strength and radius affect newly placed fields; existing field strengths can be changed under **Placed fields**.
@@ -54,7 +54,7 @@ Keyboard shortcuts are suspended while typing. Click a field marker to delete th
 
 ## Save, recover, export
 
-**Save** downloads a portable `.boast.json` project. **Open** loads one from disk. Files contain parameters, the workspace, node positions and connections, fields, the working shader, and an unfinished shader draft. Loading validates the format, sizes, ranges, identifiers, and graph structure before applying the scene. Compilation failure aborts loading and retains the previous scene.
+**Save** downloads a portable `.orbius.json` project. **Open** loads one from disk. Files contain parameters, the workspace, node positions and connections, fields, the working shader, and an unfinished shader draft. Loading validates the format, sizes, ranges, identifiers, and graph structure before applying the scene. Compilation failure aborts loading and retains the previous scene.
 
 The browser keeps a debounced local autosave and offers to restore it on the next visit. Use explicit disk saves for durable copies. There is no server storage or cloud sync. Saved projects recreate settings and field placement, not a bit-exact checkpoint of all GPU particle positions or wall-clock time. Transient shockwaves are omitted.
 
@@ -75,7 +75,7 @@ downloads.
 
 Because that endpoint can write files, it is confined deliberately: names are rebuilt
 from `[a-z0-9-]` rather than escaped, the target directory comes from a fixed map, the
-extension is fixed, every request must carry an `x-boast` header (which forces a CORS
+extension is fixed, every request must carry an `x-orbius` header (which forces a CORS
 preflight that only this dev server's own origins pass), and the `Origin` header is
 checked independently.
 

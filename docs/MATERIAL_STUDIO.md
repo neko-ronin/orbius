@@ -1,4 +1,4 @@
-# BOAST material and object studio
+# ORBIUS material and object studio
 
 ## User-directed object composition
 
@@ -98,7 +98,7 @@ sloshing.
 
 Projects store the enclosure's id, not the voxel grid, and rebuild the field from
 the mesh on open. Particle counts, positions, and elapsed time are a recipe, not a
-resumable GPU snapshot, as everywhere else in BOAST.
+resumable GPU snapshot, as everywhere else in ORBIUS.
 
 ## Rendering and persistence
 

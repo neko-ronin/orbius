@@ -1,1 +1,48 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="11" fill="#16101f"/><path d="M24 6v36M6 24h36M11 11l26 26M11 37l26-26" stroke="#b9a2ff" stroke-width="5"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <defs>
+    <radialGradient id="halo">
+      <stop offset="0" stop-color="#b9a2ff" stop-opacity=".45"/>
+      <stop offset="1" stop-color="#b9a2ff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="orb" cx=".36" cy=".32" r=".78">
+      <stop offset="0" stop-color="#fbf8ff"/>
+      <stop offset=".26" stop-color="#cbb8ff"/>
+      <stop offset=".62" stop-color="#6c52b6"/>
+      <stop offset="1" stop-color="#150f24"/>
+    </radialGradient>
+    <radialGradient id="rim">
+      <stop offset=".72" stop-color="#c5dec5" stop-opacity="0"/>
+      <stop offset="1" stop-color="#c5dec5" stop-opacity=".55"/>
+    </radialGradient>
+    <!-- The stream brightens toward the particle leading it round the orb. -->
+    <linearGradient id="trail" gradientUnits="userSpaceOnUse" x1="2.5" x2="34.3" y1="0" y2="0">
+      <stop offset="0" stop-color="#cbb8ff" stop-opacity=".3"/>
+      <stop offset="1" stop-color="#f4f0ff"/>
+    </linearGradient>
+  </defs>
+  <rect width="48" height="48" rx="11" fill="#0e1110"/>
+  <g transform="translate(4 4)">
+    <circle cx="20" cy="20" r="19" fill="url(#halo)"/>
+    <!-- Round caps on zero-length dashes draw the orbit as a stream of particles. -->
+    <g transform="rotate(-24 20 20)" fill="none" stroke-linecap="round">
+      <path d="M2.5 20a17.5 5.2 0 0 1 35 0" stroke="#cbb8ff" stroke-width="1" stroke-dasharray="0 2.2" opacity=".4"/>
+    </g>
+    <circle cx="20" cy="20" r="8.5" fill="url(#orb)"/>
+    <circle cx="20" cy="20" r="8.5" fill="url(#rim)"/>
+    <g transform="rotate(-24 20 20)" fill="#e2d8ff">
+      <path d="M2.5 20A17.5 5.2 0 0 0 34.3 23" fill="none" stroke="url(#trail)" stroke-width="1.2" stroke-linecap="round" stroke-dasharray="0 2"/>
+      <circle cx="12.6" cy="24.7" r=".9" opacity=".7"/>
+      <circle cx="24.5" cy="25" r=".7" opacity=".85"/>
+      <circle cx="34.3" cy="23" r="3" fill="#cbb8ff" opacity=".3"/>
+      <circle cx="34.3" cy="23" r="1.6" fill="#fbf8ff"/>
+    </g>
+    <g fill="#e2d8ff">
+      <circle cx="34.5" cy="7" r=".9" opacity=".8"/>
+      <circle cx="6.5" cy="9.5" r=".6" opacity=".5"/>
+      <circle cx="13" cy="4.5" r=".4" opacity=".4"/>
+      <circle cx="8" cy="33" r=".7" opacity=".6"/>
+      <circle cx="31" cy="34.5" r=".5" opacity=".45"/>
+      <circle cx="37" cy="29" r=".4" opacity=".4"/>
+    </g>
+  </g>
+</svg>

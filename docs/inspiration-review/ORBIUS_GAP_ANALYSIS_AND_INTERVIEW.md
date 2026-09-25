@@ -1,10 +1,10 @@
-# BOAST: reference gaps, directions, and interview
+# ORBIUS: reference gaps, directions, and interview
 
 8 September 2026. Reviewed against local baseline commit `da509c8`. This is source inspection and reference analysis, not a new live-browser performance benchmark. No application code was changed during this review.
 
 ## Finding
 
-The orb quality problem is structural. BOAST has useful controls and a working rendering foundation, but its built-in orb looks largely vary one surface model. The references separate shell, interior, fine structure, and staging; their variety survives removing color. Adding more preset names or increasing the ray count would leave the main gap unresolved.
+The orb quality problem is structural. ORBIUS has useful controls and a working rendering foundation, but its built-in orb looks largely vary one surface model. The references separate shell, interior, fine structure, and staging; their variety survives removing color. Adding more preset names or increasing the ray count would leave the main gap unresolved.
 
 The particle playground is worth retaining. Its next substantial advance would be stable material identities and visible relationships between populations, rather than simply a larger population or more global noise.
 
@@ -96,7 +96,7 @@ Ask these in small groups after the first choices. They are design prompts, not 
 
 ### Taste and identity
 
-- Which two recordings would you show someone to communicate BOAST's identity, and which should remain occasional experiments?
+- Which two recordings would you show someone to communicate ORBIUS's identity, and which should remain occasional experiments?
 - For orbs, do you prefer a stable sphere containing wild activity, a living surface that changes shape, or both as distinct families?
 - Should the default emotional register be elegant and mysterious, energetic and spectacular, or intimate and biological?
 - Would you accept fewer templates if every one looked like a different material and had a beautifully staged preview?
@@ -130,6 +130,6 @@ For the first material milestone, the critical question is whether the three exa
 
 ## Scope and reuse notes
 
-The standalone [agent brief](AGENT_IMPLEMENTATION_BRIEF.md) contains all nine visual descriptions without BOAST implementation assumptions. The [evidence index](README.md) links the timestamped assets and explains review limitations.
+The standalone [agent brief](AGENT_IMPLEMENTATION_BRIEF.md) contains all nine visual descriptions without ORBIUS implementation assumptions. The [evidence index](README.md) links the timestamped assets and explains review limitations.
 
 The identified avatar reference is [Orbkit](https://github.com/zzzzshawn/orbkit). Its [shader license](https://github.com/zzzzshawn/orbkit/blob/main/LICENSE-SHADERS.md) includes noncommercial restrictions for derived shader content alongside MIT portions. This is a reason to implement the desired material vocabulary independently or review individual permissions, not a reason to discard the UI inspiration. No dependency was installed, downloaded for execution, or newly vetted as safe in this review.

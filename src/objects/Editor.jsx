@@ -705,7 +705,7 @@ export default function ObjectEditor({
               <input
                 ref={simulationInput}
                 type="file"
-                accept=".json,.boast.json"
+                accept=".json,.orbius.json"
                 hidden
                 onChange={importFile}
               />

@@ -1,9 +1,9 @@
-# BOAST inspiration review
+# ORBIUS inspiration review
 
 9 videos reviewed on 8 September 2026. Two separate deliverables:
 
 - [Standalone implementation-agent brief](AGENT_IMPLEMENTATION_BRIEF.md): individual descriptions of every video, visual/interaction requirements, proposed approaches, and acceptance criteria. Designed to work outside the current codebase.
-- [BOAST gap analysis and interview](BOAST_GAP_ANALYSIS_AND_INTERVIEW.md): current source evidence, prioritized proposals, expansive directions, and questions awaiting decisions.
+- [ORBIUS gap analysis and interview](ORBIUS_GAP_ANALYSIS_AND_INTERVIEW.md): current source evidence, prioritized proposals, expansive directions, and questions awaiting decisions.
 
 ## Evidence inventory
 

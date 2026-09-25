@@ -50,7 +50,7 @@ export function exportFamily(config, colors) {
     if (fragment.includes(name)) uniforms[name] = config[key];
   }
   return {
-    format: "boast-shader-family",
+    format: "orbius-shader-family",
     version: 1,
     vertex: quadVertex,
     fragment,
@@ -62,6 +62,6 @@ export function exportFamily(config, colors) {
       (usesChemistry
         ? "This family samples uChemistry, a Gray-Scott reaction-diffusion field in an equirectangular map (R feed, G reagent), which you must supply and step yourself; without it the surface renders as bare crust. "
         : "No textures are read. ") +
-      "This integration bundle is not a BOAST project: use Save in BOAST for a project that can be reopened.",
+      "This integration bundle is not a ORBIUS project: use Save in ORBIUS for a project that can be reopened.",
   };
 }
