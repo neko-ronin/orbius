@@ -1125,7 +1125,8 @@ function App() {
                 <span>OBJECT COMPOSITION</span>
                 <h2>Choose a form. Make it yours.</h2>
                 <p>
-                  Add a glass orb or cylinder, or import an OBJ or STL mesh.
+                  Add a glass orb, cylinder or cup, or import an OBJ or STL
+                  mesh.
                   <br />
                   Turn it into glass, surface dots, or a filled dot volume.
                 </p>

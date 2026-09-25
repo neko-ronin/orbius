@@ -4,7 +4,14 @@ import {
   layerDefaults,
   validateLayers,
 } from "./layers.js";
-import { primitiveMesh, isFaceted, orbForms, WALL } from "./primitives.js";
+import {
+  primitiveMesh,
+  isFaceted,
+  orbForms,
+  cups,
+  oldFashionedCuts,
+  WALL,
+} from "./primitives.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -315,6 +322,63 @@ test("a hollow form encloses a cavity that still fills with dots", () => {
   assert.equal(middle(volumePoints(mesh, 24)), 0);
   assert.ok(middle(volumePoints(mesh, 24, true)) > 100);
   assert.ok(WALL[0] <= wall && wall <= WALL[1]);
+});
+
+// A cup is not star-shaped around its own centre, so "every normal points away from
+// the origin" says nothing about one. What has to hold instead: the outline closes,
+// the solid it bounds has positive volume — one reversed patch and the winding test
+// the glass depends on is already wrong — and the cavity is real, which is the whole
+// difference between a glass and a lump shaped like one.
+test("every cup is a closed vessel with a cavity, inside the unit box", () => {
+  for (const [id] of cups)
+    for (const [cut] of id === "oldFashioned"
+      ? oldFashionedCuts
+      : [["plain"]]) {
+      const where = `${id}/${cut}`;
+      const mesh = primitiveMesh("cup", { cup: id, cut });
+      const info = meshInfo(mesh);
+      assert.equal(info.closed, true, `${where} is not closed`);
+      assert.equal(info.boundaryEdges, 0, `${where} has open edges`);
+      assert.ok(
+        [...mesh].every((v) => Number.isFinite(v) && Math.abs(v) <= 1),
+        `${where} leaves the unit box`,
+      );
+      let volume = 0;
+      for (let i = 0; i < mesh.length; i += 9) {
+        const [a, b, c] = [0, 3, 6].map((k) => [
+          ...mesh.slice(i + k, i + k + 3),
+        ]);
+        volume +=
+          (a[0] * (b[1] * c[2] - b[2] * c[1]) +
+            a[1] * (b[2] * c[0] - b[0] * c[2]) +
+            a[2] * (b[0] * c[1] - b[1] * c[0])) /
+          6;
+      }
+      assert.ok(volume > 0.01, `${where} is inside out or empty`);
+      // Alternate crossings fill the wall; first-to-last fills what the glass holds.
+      const wall = volumePoints(mesh, 32).length,
+        held = volumePoints(mesh, 32, true).length;
+      assert.ok(held > wall * 1.3, `${where} holds nothing`);
+    }
+  // The cut menu belongs to the Old Fashioned, and an unknown choice from a saved
+  // file falls back to the plain one rather than throwing at whoever loaded it.
+  assert.deepEqual(
+    primitiveMesh("cup", { cup: "wine", cut: "crystal" }),
+    primitiveMesh("cup", { cup: "wine" }),
+  );
+  assert.deepEqual(
+    primitiveMesh("cup", { cup: "tiki", cut: "spiral" }),
+    primitiveMesh("cup", { cup: "oldFashioned", cut: "plain" }),
+  );
+  // A cut glass and a panelled one are read as facets; a dimple is a dent, not a
+  // ring of flats.
+  for (const [cut, faceted] of [
+    ["plain", false],
+    ["dimpled", false],
+    ["crystal", true],
+    ["paneled", true],
+  ])
+    assert.equal(isFaceted("cup", { cup: "oldFashioned", cut }), faceted, cut);
 });
 
 test("faceted shading gives every triangle its own normal", () => {

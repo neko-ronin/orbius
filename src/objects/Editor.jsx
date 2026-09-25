@@ -6,6 +6,8 @@ import { layerDefaults } from "./layers.js";
 import {
   primitiveDefaults,
   orbForms,
+  cups,
+  oldFashionedCuts,
   isFaceted,
   SIDES,
   DETAIL,
@@ -202,15 +204,24 @@ export default function ObjectEditor({
   function addPrimitive(kind) {
     if (busy || objects.length >= MAX_OBJECTS) return;
     const options = { ...shape };
+    const cut = oldFashionedCuts.find(([id]) => id === options.cut)[1];
     const name =
-      kind === "orb" && options.form !== "smooth"
-        ? orbForms.find(([id]) => id === options.form)[1]
-        : `Glass ${kind}`;
+      kind === "cup"
+        ? `${cups.find(([id]) => id === options.cup)[1]} glass${
+            options.cup === "oldFashioned" && options.cut !== "plain"
+              ? `, ${cut.toLowerCase()}`
+              : ""
+          }`
+        : kind === "orb" && options.form !== "smooth"
+          ? orbForms.find(([id]) => id === options.form)[1]
+          : `Glass ${kind}`;
     process({ primitive: kind, options }, (result) =>
       addObject(name, {
         ...result,
         faceted: isFaceted(kind, options),
-        hollow: options.hollow,
+        // A cup's cavity is in its outline, so it is a wall around one however the
+        // hollow box is set.
+        hollow: kind === "cup" || options.hollow,
       }),
     );
   }
@@ -475,8 +486,8 @@ export default function ObjectEditor({
         <span className="eyebrow">YOUR GEOMETRY / YOUR MATERIALS</span>
         <h2>Object composition</h2>
         <p>
-          Start with a basic form or import a mesh. Give each object its own
-          material.
+          Start with a basic form or a drinking glass, or import a mesh. Give
+          each object its own material.
         </p>
       </div>
       <div className="primitive-actions">
@@ -491,6 +502,12 @@ export default function ObjectEditor({
           onClick={() => addPrimitive("cylinder")}
         >
           + Glass cylinder
+        </button>
+        <button
+          disabled={busy || objects.length >= MAX_OBJECTS}
+          onClick={() => addPrimitive("cup")}
+        >
+          + Glass cup
         </button>
       </div>
       <div className="shape-options">
@@ -516,6 +533,36 @@ export default function ObjectEditor({
             onChange={(v) => shapeField("detail", v)}
             tip={tip}
           />
+        )}
+        <label>
+          <span>Cup</span>
+          <select
+            aria-label="Cup"
+            value={shape.cup}
+            onChange={(e) => shapeField("cup", e.target.value)}
+          >
+            {cups.map(([id, label]) => (
+              <option key={id} value={id}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {shape.cup === "oldFashioned" && (
+          <label>
+            <span>Old Fashioned cut</span>
+            <select
+              aria-label="Old Fashioned cut"
+              value={shape.cut}
+              onChange={(e) => shapeField("cut", e.target.value)}
+            >
+              {oldFashionedCuts.map(([id, label]) => (
+                <option key={id} value={id}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
         )}
         <Control
           id="cylinderSides"
