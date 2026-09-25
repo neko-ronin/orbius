@@ -90,8 +90,11 @@ points.
 
 The conformed values are ordinary controls afterwards, under **Contained
 simulation**. Reopening a project does not re-conform: what was saved is already
-authored for its vessel. Placed fields do not travel with a simulation; they are
-a screen-space stage tool and would need their own port. The enclosure's
+authored for its vessel. Placed fields travel with a simulation: positions, reach
+and pull scale by the same ratio as the emitter, so a well holds the same part of
+the cloud it held on the open stage. They are stored in the shell's own frame and
+placed in the scene every frame, so they follow the shell rigidly while the cloud
+follows it by force. **Contained fields** scales their pull. The enclosure's
 transform drives the confinement live, so moving the vessel carries the contents,
 but as a force rather than a rigid attachment: fast moves leave the cloud
 sloshing.

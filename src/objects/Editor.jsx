@@ -26,6 +26,7 @@ import {
   validateProject,
   simulationKeys,
   conformSimulation,
+  conformFields,
 } from "../project.js";
 // Field notes for the shape of the next primitive, in the same shape every other
 // panel uses: [label, min, max, step, note, search terms].
@@ -318,6 +319,7 @@ export default function ObjectEditor({
             config: Object.fromEntries(
               simulationKeys.map((key) => [key, conformed[key]]),
             ),
+            fields: conformFields(doc.fields, doc.config, conformed),
           });
           notify(
             `${doc.name} is running inside ${current.name}, fitted to it.`,
@@ -763,7 +765,7 @@ export default function ObjectEditor({
               )}
               <p className="mesh-formats">
                 {particleContainer === current.id
-                  ? "A saved particle simulation is running inside this shell. Its solver parameters travel with this project; placed fields do not."
+                  ? "A saved particle simulation is running inside this shell, with its placed fields fitted to it. Both travel with this project; Contained fields sets how hard the fields pull."
                   : "Anything you have saved becomes what it can be: a particle piece is poured in and fitted to the shell, an orb shader is placed inside it, another glass composition adds its objects."}
               </p>
             </>

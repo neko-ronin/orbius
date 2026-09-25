@@ -253,6 +253,7 @@ export const defaults = {
   showScale: 1.5,
   backdrop: 0.55,
   containment: 1.2,
+  fieldGain: 1,
   stageFloor: -1.15,
   stageRoughness: 0.42,
   stageTexture: 0.55,
@@ -293,6 +294,14 @@ export const controls = {
     0.05,
     "How hard the enclosure holds the loaded particle simulation inside its walls. Low values let energetic material bulge through thin sections; high values pin it to the surface.",
     "particle boundary collision response",
+  ],
+  fieldGain: [
+    "Contained fields",
+    0,
+    3,
+    0.05,
+    "Scales the placed fields a poured simulation brought with it. They are fitted to the vessel on the way in; this is for the rest. Zero turns them off.",
+    "particle force field strength",
   ],
   stageFloor: [
     "Floor height",
@@ -839,6 +848,23 @@ export function conformSimulation(config, interior, scale) {
     spread,
     depth: clamp("depth", (config.depth / authored) * spread),
   };
+}
+// A poured simulation's fields keep their place in its figure. The emitter was
+// re-sized to the vessel, so positions, reach and pull scale with it, and a well
+// holds the same part of the cloud it held on the open stage. They are kept in
+// the shell's own frame, which is what lets them follow it when it moves.
+export function conformFields(fields, config, conformed) {
+  const ratio = conformed.spread / Math.max(0.3, config.spread);
+  const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+  return fields.map((f) => ({
+    ...f,
+    position: f.position.map(
+      (v) =>
+        Math.round(clamp(v * ratio, -FIELD_EXTENT, FIELD_EXTENT) * 100) / 100,
+    ),
+    radius: clamp(f.radius * ratio, 0.1, 6),
+    strength: clamp(f.strength * ratio, 0, 12),
+  }));
 }
 export const fieldTypes = [
   "attract",

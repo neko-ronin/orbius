@@ -7,6 +7,7 @@ import {
   validateProject,
   resolveGraph,
   conformSimulation,
+  conformFields,
   controls,
   lightRig,
   lightRoles,
@@ -331,6 +332,39 @@ test("a contained particle simulation names a glass shell and survives a round t
   assert.equal(validateProject(fixture()).particleContainer, undefined);
 });
 
+test("poured fields keep their place in the figure, scaled with it", () => {
+  const saved = { ...defaults, spread: 2.4 };
+  const vessel = conformSimulation(
+    saved,
+    { center: [0, 0, 0], extent: [0.8, 0.98, 0.8], fill: 0.5 },
+    [1, 1, 1],
+  );
+  const well = {
+    id: "well",
+    type: "attract",
+    position: [1.2, -0.6, 0.3],
+    axis: [0, 0, 1],
+    reach: "point",
+    strength: 3,
+    radius: 1.2,
+    color: "#ffffff",
+  };
+  const [held] = conformFields([well], saved, vessel);
+  const ratio = vessel.spread / saved.spread;
+  held.position.forEach((v, i) =>
+    assert.ok(Math.abs(v - well.position[i] * ratio) <= 0.005),
+  );
+  assert.ok(Math.abs(held.radius - well.radius * ratio) < 1e-9);
+  assert.ok(Math.abs(held.strength - well.strength * ratio) < 1e-9);
+  assert.deepEqual(held.axis, well.axis);
+  // What was poured saves and opens as ordinary fields.
+  const p = fixture();
+  p.mode = "glass";
+  p.fields = [held];
+  assert.deepEqual(validateProject(JSON.parse(JSON.stringify(p))).fields, [
+    held,
+  ]);
+});
 test("a loaded simulation is authored for the enclosure it is poured into", () => {
   const saved = {
     ...defaults,

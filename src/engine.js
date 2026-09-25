@@ -362,9 +362,14 @@ export class Engine {
   }
   // Enclosure local space to world, matching containModel() in the solver.
   containerToWorld(q) {
-    const { position, rotation, scale } = this.container;
-    const [rx, ry, rz] = rotation.map((d) => (d * Math.PI) / 180);
-    let [x, y, z] = q.map((n, i) => n * scale[i]);
+    const { position, scale } = this.container;
+    const [x, y, z] = this.containerRotate(q.map((n, i) => n * scale[i]));
+    return [x + position[0], y + position[1], z + position[2]];
+  }
+  containerRotate([x, y, z]) {
+    const [rx, ry, rz] = this.container.rotation.map(
+      (d) => (d * Math.PI) / 180,
+    );
     [y, z] = [
       Math.cos(rx) * y - Math.sin(rx) * z,
       Math.sin(rx) * y + Math.cos(rx) * z,
@@ -377,7 +382,7 @@ export class Engine {
       Math.cos(rz) * x - Math.sin(rz) * y,
       Math.sin(rz) * x + Math.cos(rz) * y,
     ];
-    return [x + position[0], y + position[1], z + position[2]];
+    return [x, y, z];
   }
   seedInside(rand) {
     const grid = this.containerGrid,
@@ -408,9 +413,24 @@ export class Engine {
       axis = new Float32Array(48),
       extra = new Float32Array(48),
       colors = new Float32Array(36);
+    // Poured into a shell, fields are in the shell's own frame, rotated with it and
+    // centred on it the way the solver seeds the cloud, so moving it carries them.
+    const held = this.mode === "glass" && this.contained();
+    const place = (p) => {
+      if (!held) return p;
+      const [x, y, z] = this.containerRotate(p),
+        at = this.container.position;
+      return [x + at[0], y + at[1], z + at[2]];
+    };
     fields.slice(0, 12).forEach((f, i) => {
-      pos.set([...f.position, f.strength], i * 4);
-      axis.set([...f.axis, f.radius], i * 4);
+      pos.set(
+        [...place(f.position), f.strength * (held ? this.config.fieldGain : 1)],
+        i * 4,
+      );
+      axis.set(
+        [...(held ? this.containerRotate(f.axis) : f.axis), f.radius],
+        i * 4,
+      );
       extra.set(
         [fieldTypes.indexOf(f.type), f.reach === "column" ? 1 : 0],
         i * 4,

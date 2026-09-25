@@ -502,6 +502,7 @@ function App() {
   function onSimulation(payload) {
     if (!payload) {
       setParticleContainer(null);
+      setFields([]);
       engine.current?.setContainer(null);
       engine.current?.reset(latest.current.config);
       setDirty(true);
@@ -511,6 +512,8 @@ function App() {
     const nextConfig = { ...latest.current.config, ...payload.config };
     setConfig(nextConfig);
     setParticleContainer(payload.container);
+    // In the glass workspace, fields are only ever the ones a pour brought.
+    setFields(payload.fields);
     setDirty(true);
     const shell = latest.current.objects.find(
       (o) => o.id === payload.container,
@@ -1402,6 +1405,7 @@ function App() {
                             "Contained simulation",
                             [
                               "containment",
+                              "fieldGain",
                               "count",
                               "size",
                               "speed",
