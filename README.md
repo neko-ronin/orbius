@@ -29,7 +29,7 @@ A glass shell can hold one. **Inner shader** on a glass object renders a family 
 - **Node composer** is hidden from navigation until it is mature enough to feature. Its code stays in `src/NodeEditor.jsx`, and a project saved in that workspace still opens into it. It connects a particle or orb source through curl, spiral warp, color grade, and bloom to one stage output. Drag cards to arrange them. Click an output port and then an input port to wire them. Click a wire to disconnect. Only the chain reaching the output affects rendering; disconnected output renders an empty stage. Cycles and multiple input connections are rejected. Up to 24 nodes.
 - **Show mode** hides the studio UI and increases resolution from 70% to 150% by default. Both scales are adjustable. Orb primary rays use 80 steps in development and 192 in show mode; secondary rays and shadow samples also increase. Rendering is capped at 3840 px on the longer edge and at the GPU texture limit. Exit with `S`, `Escape`, or the top-right control (revealed on hover/focus; faintly visible on touch devices).
 
-Each numeric control has an explanation on hover or focus, an example, and a learning-search link. Expand the inspector sections to reach all parameters. Light color affects newly placed lights. The interaction strength and radius affect newly placed fields; existing field strengths can be changed under **Placed fields**.
+Each numeric control has an explanation on hover or focus, an example, and a learning-search link. Expand the inspector sections to reach all parameters. Light color affects newly placed lights. The interaction strength and radius affect newly placed fields; an existing field's strength and its X/Y/Z position can be changed under **Placed fields**.
 
 | Key | Action |
 | --- | --- |
@@ -50,7 +50,7 @@ Each numeric control has an explanation on hover or focus, an example, and a lea
 | `Cmd/Ctrl S` | Save the project |
 | `?` | Field guide |
 
-Keyboard shortcuts are suspended while typing. Click a field marker to delete that field. There are at most 12 simultaneous fields. Orb interaction uses camera dragging; particle field markers are hidden there.
+Keyboard shortcuts are suspended while typing. Fields sit in the scene: a click places one on the plane through the centre facing the camera, and it stays put as you orbit; nearer markers draw larger. Projects saved before fields had depth open with each field as a **column** along the line of sight it was placed from, so it sits where it was drawn. Click a field marker to delete that field. There are at most 12 simultaneous fields. Orb interaction uses camera dragging; particle field markers are hidden there.
 
 ## Save, recover, export
 

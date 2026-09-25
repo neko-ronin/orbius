@@ -127,6 +127,9 @@ before destructive cases, and put it back.
 | PRT-13 | Material populations on | Three populations appear; per-species controls become available |
 | PRT-14 | Light colour picker | Placed lights take the chosen colour |
 | PRT-15 | Empty stage hint | Shown only when no fields exist, and names the selected tool |
+| PRT-16 | Place a field, then orbit or let autorotate run | The marker and the particles it gathers move with the scene, not the screen |
+| PRT-17 | Field X/Y/Z boxes | Move the field and its marker; refuse to leave ±7 |
+| PRT-18 | Open a project saved before fields had depth | Each field lists as a column and sits where it was drawn |
 
 ---
 

@@ -40,6 +40,9 @@ import {
   download,
   lightRoles,
   lightKeys,
+  viewProject,
+  viewUnproject,
+  FIELD_EXTENT,
 } from "./project.js";
 import { authorMessage } from "./shaders.js";
 import "./style.css";
@@ -52,6 +55,16 @@ const tools = [
   ["burst", "Shockwave", "B"],
   ["freeze", "Freeze field", "F"],
 ];
+// A marker follows its field through the scene, so it moves on every frame the
+// camera does, autorotate included, and is written to directly rather than through
+// a React render. Nearer is larger; behind the eye there is nothing to click.
+function placeMarker(el, position, view) {
+  const [x, y, depth] = viewProject(position, view);
+  el.style.left = `${(x + 1) * 50}%`;
+  el.style.top = `${(1 - y) * 50}%`;
+  el.style.transform = `translate(-50%, -50%) scale(${Math.min(1.6, Math.max(0.6, view.eye / depth))})`;
+  el.hidden = depth < 1;
+}
 const sections = {
   particles: [
     ["Emission", ["count", "size", "spread", "life", "arms", "twist", "depth"]],
@@ -265,6 +278,7 @@ function App() {
     file = useRef(),
     noticeTimer = useRef(),
     drag = useRef(),
+    markers = useRef(new Map()),
     record = useRef(),
     recordTimer = useRef(),
     latest = useRef(),
@@ -323,6 +337,12 @@ function App() {
         // that was on screen when the context went.
         writeStored("autosave", project()).catch(() => {});
       });
+      engine.current.onFrame = (view) => {
+        for (const f of latest.current.fields) {
+          const el = markers.current.get(f.id);
+          if (el) placeMarker(el, f.position, view);
+        }
+      };
     } catch (e) {
       setError(e.message);
     }
@@ -712,11 +732,17 @@ function App() {
       return;
     }
     const rect = canvas.current.getBoundingClientRect();
+    const view = engine.current?.view;
+    if (!view) return;
     const f = {
       id: crypto.randomUUID(),
       type: tool,
-      x: ((e.clientX - rect.left) / rect.width) * 2 - 1,
-      y: 1 - ((e.clientY - rect.top) / rect.height) * 2,
+      ...viewUnproject(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        1 - ((e.clientY - rect.top) / rect.height) * 2,
+        view,
+      ),
+      reach: "point",
       strength:
         (tool === "light" ? config.lightIntensity : config.fieldStrength) *
         (e.shiftKey ? 2 : 1),
@@ -727,6 +753,10 @@ function App() {
     setDirty(true);
     if (tool === "burst")
       setTimeout(() => setFields((fs) => fs.filter((v) => v.id !== f.id)), 650);
+  }
+  function editField(id, change) {
+    setFields((fs) => fs.map((v) => (v.id === id ? { ...v, ...change } : v)));
+    setDirty(true);
   }
   function stageMove(e) {
     if (!drag.current) return;
@@ -1094,16 +1124,18 @@ function App() {
                   <button
                     className={`field-marker field-${f.type}`}
                     key={f.id}
+                    ref={(el) => {
+                      markers.current.set(f.id, el);
+                      if (engine.current?.view)
+                        placeMarker(el, f.position, engine.current.view);
+                      return () => markers.current.delete(f.id);
+                    }}
                     aria-label={`Remove ${f.type} field`}
                     title={`Remove ${f.type} · strength ${f.strength.toFixed(1)}`}
                     onClick={() =>
                       setFields((fs) => fs.filter((v) => v.id !== f.id))
                     }
-                    style={{
-                      left: `${(f.x + 1) * 50}%`,
-                      top: `${(1 - f.y) * 50}%`,
-                      "--field-color": f.color,
-                    }}
+                    style={{ "--field-color": f.color }}
                   >
                     <Icon name={f.type} size={15} />
                     <span>{f.strength.toFixed(1)}</span>
@@ -1429,7 +1461,7 @@ function App() {
                     fields.map((f) => (
                       <div key={f.id}>
                         <label>
-                          {f.type}
+                          {f.reach === "column" ? `${f.type} · column` : f.type}
                           <input
                             aria-label={`${f.type} strength`}
                             type="number"
@@ -1439,19 +1471,12 @@ function App() {
                             value={f.strength}
                             onChange={(e) => {
                               if (e.target.value)
-                                setFields((fs) =>
-                                  fs.map((v) =>
-                                    v.id === f.id
-                                      ? {
-                                          ...v,
-                                          strength: Math.max(
-                                            0.1,
-                                            Math.min(12, +e.target.value),
-                                          ),
-                                        }
-                                      : v,
+                                editField(f.id, {
+                                  strength: Math.max(
+                                    0.1,
+                                    Math.min(12, +e.target.value),
                                   ),
-                                );
+                                });
                             }}
                           />
                         </label>
@@ -1463,6 +1488,36 @@ function App() {
                         >
                           <Icon name="close" size={12} />
                         </button>
+                        <div className="field-position">
+                          {["x", "y", "z"].map((axis, i) => (
+                            <label key={axis}>
+                              {axis}
+                              <input
+                                aria-label={`${f.type} ${axis} position`}
+                                type="number"
+                                min={-FIELD_EXTENT}
+                                max={FIELD_EXTENT}
+                                step="0.1"
+                                value={f.position[i]}
+                                onChange={(e) => {
+                                  if (e.target.value)
+                                    editField(f.id, {
+                                      position: f.position.with(
+                                        i,
+                                        Math.max(
+                                          -FIELD_EXTENT,
+                                          Math.min(
+                                            FIELD_EXTENT,
+                                            +e.target.value,
+                                          ),
+                                        ),
+                                      ),
+                                    });
+                                }}
+                              />
+                            </label>
+                          ))}
+                        </div>
                       </div>
                     ))
                   ) : (

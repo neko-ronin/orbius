@@ -2726,3 +2726,22 @@ body.is-scrubbing * {
   border: 0;
   padding-top: 4px;
 }
+/* Where a placed field sits in the scene, on its own line under its name. */
+.field-list > div {
+  flex-wrap: wrap;
+}
+.field-position {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  margin-top: 6px;
+}
+.field-list .field-position label {
+  gap: 5px;
+  justify-content: flex-start;
+  color: #7d7188;
+}
+.field-position input {
+  width: 100%;
+  min-width: 0;
+}

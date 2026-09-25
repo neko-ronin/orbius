@@ -1,4 +1,11 @@
 import { studioRig } from "./lighting.js";
+// Fields sit in the scene. A point reaches out in every direction; a column reaches
+// along its axis without end, which is how a field placed on screen behaved before
+// fields had depth. uFields is (position, strength), uFieldAxis (axis, radius) and
+// uFieldExtra (kind, column).
+const fieldGLSL = `uniform int uFieldCount;
+uniform vec4 uFields[12];uniform vec4 uFieldAxis[12];uniform vec4 uFieldExtra[12];
+vec3 fieldDelta(int i,vec3 p){vec3 d=uFields[i].xyz-p;if(uFieldExtra[i].y>.5)d-=uFieldAxis[i].xyz*dot(d,uFieldAxis[i].xyz);return d;}`;
 export const quadVertex = `#version 300 es
 precision highp float;
 out vec2 uv;
@@ -8,13 +15,12 @@ precision highp float;
 layout(location=0) in vec4 aPosition;
 layout(location=1) in vec4 aVelocity;
 out vec4 vPosition;out vec4 vVelocity;
-uniform float uDt,uTime,uLife,uSpread,uSpin,uTurbulence,uFrequency,uDrag,uGravity,uDepth,uArms,uTwist,uTilt,uRotation,uZoom,uAspect;
+uniform float uDt,uTime,uLife,uSpread,uSpin,uTurbulence,uFrequency,uDrag,uGravity,uDepth,uArms,uTwist;
 uniform float uSpeciesEnabled;
-uniform int uFieldCount;
-uniform vec4 uFields[12];uniform vec4 uFieldExtra[12];
+${fieldGLSL}
 uniform sampler2D uDensity;uniform vec3 uCouplingA,uCouplingB,uCouplingC,uSpeciesDrag,uSpeciesLift;
 precision highp sampler3D;
-uniform sampler3D uVolume;uniform float uContain,uContainPush,uEye,uProjScale,uVoxel;
+uniform sampler3D uVolume;uniform float uContain,uContainPush,uVoxel;
 uniform vec3 uContainPos,uContainRot,uContainScale;
 float hash(float n){return fract(sin(n*127.1)*43758.5453);}
 // Matches the enclosure's own model rotation in the object renderer.
@@ -34,7 +40,6 @@ vec3 spawnInside(float seed){for(int k=0;k<6;k++){float s=seed+float(k)*7.13;
  if(occupancy(q)>.8) return q;}
  return vec3(0.);}
 vec3 spawn(float seed){float r=sqrt(hash(seed+1.))*uSpread;float a=floor(hash(seed+2.)*uArms)*6.283185/uArms+r*uTwist+(hash(seed+3.)-.5)*.25;return vec3(cos(a)*r,(hash(seed+4.)-.5)*uDepth*(.2+r*.45),sin(a)*r);}
-mat3 camera(){float c=cos(uRotation),s=sin(uRotation),ct=cos(uTilt),st=sin(uTilt);return mat3(1,0,0,0,ct,st,0,-st,ct)*mat3(c,0,-s,0,1,0,s,0,c);}
 void main(){
  vec3 p=aPosition.xyz,v=aVelocity.xyz;float age=aPosition.w+uDt,seed=aVelocity.w;
  mat3 model=containModel();
@@ -57,13 +62,13 @@ void main(){
  vec3 offset=p-home;
  vec3 acc=flow*uTurbulence*.3+vec3(-offset.z,0,offset.x)*uSpin*.18-offset*.055;
  acc.y-=uGravity*.25;
- mat3 cam=camera();vec3 cp=cam*p;
- for(int i=0;i<12;i++){if(i>=uFieldCount)break;vec4 f=uFields[i];vec4 extra=uFieldExtra[i];vec3 target=vec3(f.xy*vec2(uAspect,1.)*(uEye-cp.z)/uZoom/uProjScale,cp.z);vec3 delta=target-cp;float d=length(delta);float fall=exp(-d*d/(extra.x*extra.x));vec3 dir=delta/max(d,.1);vec3 force=vec3(0);int kind=int(f.z);
- if(kind==0)force=dir*f.w*fall;
- if(kind==1||kind==4)force=-dir*f.w*fall*(kind==4?3.:1.);
- if(kind==2)force=vec3(-dir.y,dir.x,0.)*f.w*fall;
- if(kind==5)v*=exp(-fall*f.w*uDt*6.);
- acc+=transpose(cam)*force;
+ for(int i=0;i<12;i++){if(i>=uFieldCount)break;vec3 delta=fieldDelta(i,p);float d=length(delta),r=uFieldAxis[i].w,s=uFields[i].w;float fall=exp(-d*d/(r*r));vec3 dir=delta/max(d,.1);vec3 force=vec3(0);int kind=int(uFieldExtra[i].x);
+ if(kind==0)force=dir*s*fall;
+ if(kind==1||kind==4)force=-dir*s*fall*(kind==4?3.:1.);
+ // A vortex turns about its axis: the line of sight it was placed along.
+ if(kind==2)force=cross(uFieldAxis[i].xyz,dir)*s*fall;
+ if(kind==5)v*=exp(-fall*s*uDt*6.);
+ acc+=force;
  }
  float damping=uDrag;
  if(uSpeciesEnabled>.5){int species=int(mod(floor(seed),3.));vec2 st=p.xz/8.+.5;vec2 pixel=vec2(1./128.,0);vec3 gx=texture(uDensity,st+pixel).rgb-texture(uDensity,st-pixel).rgb;vec3 gz=texture(uDensity,st+pixel.yx).rgb-texture(uDensity,st-pixel.yx).rgb;vec3 weights=species==0?uCouplingA:species==1?uCouplingB:uCouplingC;acc.xz+=clamp(vec2(dot(gx,weights),dot(gz,weights))*4.,vec2(-2.),vec2(2.));acc.y+=uSpeciesLift[species];damping+=uSpeciesDrag[species];}
@@ -94,14 +99,16 @@ layout(location=0) in vec4 aPosition;layout(location=1) in vec4 aVelocity;
 uniform float uTilt,uRotation,uAspect,uZoom,uSize,uPixelRatio,uLife,uHue,uEye,uProjScale;
 uniform vec3 uColorA,uColorB,uColorC;
 uniform float uSpeciesEnabled;
-uniform int uFieldCount;uniform vec4 uFields[12];uniform vec4 uFieldExtra[12];uniform vec3 uFieldColors[12];
+${fieldGLSL}
+uniform vec3 uFieldColors[12];
 out vec3 color;out float alpha;
 void main(){float c=cos(uRotation),s=sin(uRotation),ct=cos(uTilt),st=sin(uTilt);vec3 p=mat3(c,0,-s,0,1,0,s,0,c)*aPosition.xyz;p=mat3(1,0,0,0,ct,st,0,-st,ct)*p;float z=max(1.,uEye-p.z);vec2 screen=p.xy*uProjScale*uZoom/vec2(uAspect,1.)/z;gl_Position=vec4(screen,clamp(z/12.,0.,1.),1);
  gl_PointSize=clamp(uSize*uPixelRatio*4./z,1.,32.);
  float f=fract(aVelocity.w*.013+length(aPosition.xyz)*.17+uHue);color=f<.5?mix(uColorA,uColorB,f*2.):mix(uColorB,uColorC,(f-.5)*2.);
  if(uSpeciesEnabled>.5){int species=int(mod(floor(aVelocity.w),3.));color=species==0?vec3(1.,.5,.08):species==1?vec3(.08,.8,1.):vec3(1.,.15,.5);}
  alpha=smoothstep(0.,.6,aPosition.w)*(1.-smoothstep(uLife*.75,uLife,aPosition.w))*(uSpeciesEnabled>.5?.07:.14);
- for(int i=0;i<12;i++){if(i>=uFieldCount)break;if(int(uFields[i].z)==3){float d=length((screen-uFields[i].xy)*vec2(uAspect,1.));color+=uFieldColors[i]*exp(-d*d/(uFieldExtra[i].x*.15))*uFields[i].w;}}
+ // In scene units, the falloff the screen-space glow had at zoom 1.
+ for(int i=0;i<12;i++){if(i>=uFieldCount)break;if(int(uFieldExtra[i].x)==3){vec3 d=fieldDelta(i,aPosition.xyz);color+=uFieldColors[i]*exp(-dot(d,d)/(uFieldAxis[i].w*.76))*uFields[i].w;}}
 }`;
 export const particleFragment = `#version 300 es
 precision highp float;in vec3 color;in float alpha;out vec4 frag;

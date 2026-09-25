@@ -10,6 +10,8 @@ import {
   controls,
   lightRig,
   lightRoles,
+  viewProject,
+  particleView,
 } from "./project.js";
 import { newObject, innerLook } from "./objects/model.js";
 import { newFamily, builtins } from "./materials/families.js";
@@ -31,14 +33,58 @@ test("a saved project round trips every parameter and connected graph", () => {
     {
       id: "field-1",
       type: "light",
-      x: 0.2,
-      y: -0.5,
+      position: [0.2, -0.5, 1.25],
+      axis: [0, 0, 1],
+      reach: "point",
       strength: 3,
       radius: 1,
       color: "#ffccee",
     },
   ];
   assert.deepEqual(validateProject(JSON.parse(JSON.stringify(p))), p);
+});
+test("a field saved as a screen point becomes a column where that camera looked", () => {
+  const p = fixture();
+  Object.assign(p.config, { rotation: 1.1, tilt: 0.4, zoom: 0.5 });
+  p.fields = [
+    {
+      id: "old",
+      type: "vortex",
+      x: 0.3,
+      y: -0.6,
+      strength: 2,
+      radius: 1,
+      color: "#ffffff",
+    },
+  ];
+  const [f] = validateProject(p).fields;
+  assert.equal(f.reach, "column");
+  assert.equal("x" in f || "y" in f, false);
+  // Seen from the saved camera, it is where it was placed.
+  const view = {
+    ...particleView,
+    rotation: 1.1,
+    tilt: 0.4,
+    zoom: 0.5,
+    aspect: 1.6,
+  };
+  const [sx, sy] = viewProject(f.position, view);
+  assert.ok(
+    Math.abs(sx - 0.3) < 0.01 && Math.abs(sy + 0.6) < 0.01,
+    `${sx}, ${sy}`,
+  );
+  // The column runs along that line of sight, so its whole length lands there too.
+  const along = f.position.map((v, i) => v + f.axis[i] * 1.5);
+  const [ax, ay] = viewProject(along, view);
+  assert.ok(
+    Math.abs(ax - 0.3) < 0.01 && Math.abs(ay + 0.6) < 0.01,
+    `${ax}, ${ay}`,
+  );
+  // And it saves as what it became.
+  assert.deepEqual(
+    validateProject(JSON.parse(JSON.stringify(validateProject(p)))).fields,
+    [f],
+  );
 });
 test("a project saved before the rename to Orbius still opens", () => {
   assert.equal(
@@ -77,6 +123,26 @@ test("rejects unknown node types, multiple inputs, cycles and invalid fields", (
           color: "#ffffff",
         },
       ]),
+    ...[
+      { position: [0, 8, 0] },
+      { axis: [0, 0, 2] },
+      { axis: [0, 0] },
+      { reach: "plane" },
+    ].map((change) => (p) => {
+      p.fields = [
+        {
+          id: "f",
+          type: "attract",
+          position: [0, 0, 0],
+          axis: [0, 0, 1],
+          reach: "point",
+          strength: 1,
+          radius: 1,
+          color: "#ffffff",
+          ...change,
+        },
+      ];
+    }),
   ]) {
     const p = fixture();
     change(p);

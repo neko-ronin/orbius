@@ -19,14 +19,19 @@ import {
   compositeFragment,
   orbFragment,
 } from "./shaders.js";
-import { palettes, defaultShader, lightRig } from "./project.js";
+import {
+  palettes,
+  defaultShader,
+  lightRig,
+  fieldTypes,
+  particleView,
+} from "./project.js";
 // Milliseconds of shader compilation any one frame may spend before the rest waits.
 // Roughly one frame at 60Hz: enough for several ordinary families, not enough for a
 // pathological one to be compiled twice.
 const COMPILE_BUDGET = 16;
 const rgb = (hex) =>
   [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
-const fieldTypes = ["attract", "repel", "vortex", "light", "burst", "freeze"];
 export class Engine {
   constructor(canvas, onStats, onError, animate = true) {
     this.canvas = canvas;
@@ -400,15 +405,21 @@ export class Engine {
   }
   fields(prog, fields) {
     const pos = new Float32Array(48),
+      axis = new Float32Array(48),
       extra = new Float32Array(48),
       colors = new Float32Array(36);
     fields.slice(0, 12).forEach((f, i) => {
-      pos.set([f.x, f.y, fieldTypes.indexOf(f.type), f.strength], i * 4);
-      extra.set([f.radius, 0, 0, 0], i * 4);
+      pos.set([...f.position, f.strength], i * 4);
+      axis.set([...f.axis, f.radius], i * 4);
+      extra.set(
+        [fieldTypes.indexOf(f.type), f.reach === "column" ? 1 : 0],
+        i * 4,
+      );
       colors.set(rgb(f.color), i * 3);
     });
     this.uniform(prog, "uFieldCount", Math.min(fields.length, 12), "int");
     this.uniform(prog, "uFields[0]", pos, "v4");
+    this.uniform(prog, "uFieldAxis[0]", axis, "v4");
     this.uniform(prog, "uFieldExtra[0]", extra, "v4");
     this.uniform(prog, "uFieldColors[0]", colors, "v3");
   }
@@ -488,7 +499,16 @@ export class Engine {
     const camera =
       this.mode === "glass"
         ? { uEye: 4, uProjScale: 2.5 }
-        : { uEye: 4.5, uProjScale: 2 };
+        : { uEye: particleView.eye, uProjScale: particleView.projScale };
+    // The camera this frame drew with, for anything placed over the stage.
+    this.view = {
+      rotation,
+      tilt: c.tilt,
+      zoom: c.zoom,
+      aspect: w / h,
+      eye: camera.uEye,
+      projScale: camera.uProjScale,
+    };
     gl.viewport(0, 0, w, h);
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.BLEND);
@@ -769,6 +789,7 @@ export class Engine {
       this.disposed = true;
       return;
     }
+    this.onFrame?.(this.view);
     this.frames++;
     // Poll every frame: results land a few frames after the passes that produced
     // them, and the stats callback only fires four times a second.

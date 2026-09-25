@@ -840,6 +840,89 @@ export function conformSimulation(config, interior, scale) {
     depth: clamp("depth", (config.depth / authored) * spread),
   };
 }
+export const fieldTypes = [
+  "attract",
+  "repel",
+  "vortex",
+  "light",
+  "burst",
+  "freeze",
+];
+// A particle that strays this far from home is reborn, so a field placed further
+// out would act on nothing.
+export const FIELD_EXTENT = 7;
+// The particle workspace's camera, which the shaders take as uEye and uProjScale.
+export const particleView = { eye: 4.5, projScale: 2 };
+// The camera the shaders build: yaw about Y, then tilt about X, the eye on +z
+// looking back at the origin. Rows of that matrix, world to camera.
+function cameraRows({ rotation, tilt }) {
+  const c = Math.cos(rotation),
+    s = Math.sin(rotation),
+    ct = Math.cos(tilt),
+    st = Math.sin(tilt);
+  return [
+    [c, 0, s],
+    [st * s, ct, -st * c],
+    [-ct * s, st, ct * c],
+  ];
+}
+// Where a world point lands on screen, in -1..1, and its distance from the eye —
+// the projection the particle vertex shader makes.
+export function viewProject(p, view) {
+  const [x, y, z] = cameraRows(view).map(
+    (r) => r[0] * p[0] + r[1] * p[1] + r[2] * p[2],
+  );
+  const depth = view.eye - z;
+  const k = (view.projScale * view.zoom) / Math.max(1, depth);
+  return [(x * k) / view.aspect, y * k, depth];
+}
+// A screen point put into the scene: on the plane through the origin that faces
+// the camera, with an axis running from it back to the eye. The position is kept
+// to hundredths, which is finer than a particle and reads cleanly in the list.
+export function viewUnproject(sx, sy, view) {
+  const rows = cameraRows(view);
+  // A rotation's transpose is its inverse: camera space back to world.
+  const world = (v) =>
+    [0, 1, 2].map(
+      (i) => rows[0][i] * v[0] + rows[1][i] * v[1] + rows[2][i] * v[2],
+    );
+  const k = view.eye / (view.zoom * view.projScale);
+  const [x, y] = [sx * view.aspect * k, sy * k];
+  const length = Math.hypot(x, y, view.eye);
+  return {
+    position: world([x, y, 0]).map(
+      (v) =>
+        Math.round(Math.max(-FIELD_EXTENT, Math.min(FIELD_EXTENT, v)) * 100) /
+        100,
+    ),
+    axis: world([-x / length, -y / length, view.eye / length]),
+  };
+}
+// Fields were screen points before they had depth. The solver pulled toward the ray
+// through that point at every depth, which is a column along the line of sight, so
+// that is what an old one becomes: anchored where its saved camera looked, and
+// fixed in the scene from then on.
+// ponytail: an old field moved with the window's shape; LEGACY_ASPECT is one
+// stage's, so a field far off centre lands a little aside of where it was drawn.
+const LEGACY_ASPECT = 1.6;
+function legacyField(f, config) {
+  if (f?.position !== undefined || ![f?.x, f?.y].every(Number.isFinite))
+    return f;
+  const { x, y, ...rest } = f;
+  return {
+    ...rest,
+    ...viewUnproject(x, y, {
+      ...particleView,
+      rotation: config.rotation,
+      tilt: config.tilt,
+      zoom: config.zoom,
+      aspect: LEGACY_ASPECT,
+    }),
+    reach: "column",
+  };
+}
+const isVector = (v) =>
+  Array.isArray(v) && v.length === 3 && v.every(Number.isFinite);
 export function validateProject(data) {
   // Families the project carries, resolved alongside the built-ins before anything
   // that names a family is checked against them.
@@ -990,7 +1073,9 @@ export function validateProject(data) {
     if (n.type === "output" && graph.edges.some((e) => e[0] === n.id))
       throw Error("Output cannot have outgoing connections.");
   }
-  const fields = Array.isArray(data.fields) ? data.fields : [];
+  const fields = (Array.isArray(data.fields) ? data.fields : []).map((f) =>
+    legacyField(f, config),
+  );
   if (fields.length > 12) throw Error("Maximum 12 fields.");
   const fieldIds = new Set();
   for (const f of fields)
@@ -998,12 +1083,13 @@ export function validateProject(data) {
       typeof f.id !== "string" ||
       f.id.length > 80 ||
       fieldIds.has(f.id) ||
-      !["attract", "repel", "vortex", "light", "burst", "freeze"].includes(
-        f.type,
-      ) ||
-      ![f.x, f.y, f.strength, f.radius].every(Number.isFinite) ||
-      Math.abs(f.x) > 20 ||
-      Math.abs(f.y) > 20 ||
+      !fieldTypes.includes(f.type) ||
+      !isVector(f.position) ||
+      f.position.some((v) => Math.abs(v) > FIELD_EXTENT) ||
+      !isVector(f.axis) ||
+      Math.abs(Math.hypot(...f.axis) - 1) > 1e-3 ||
+      !["point", "column"].includes(f.reach) ||
+      ![f.strength, f.radius].every(Number.isFinite) ||
       f.strength < 0 ||
       f.strength > 12 ||
       f.radius < 0.1 ||
