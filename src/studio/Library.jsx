@@ -3,6 +3,16 @@ import { Engine } from "../engine.js";
 import { defaults } from "../project.js";
 import { materialBase } from "../materials/catalog.js";
 const cache = new Map();
+// Mirrors persistenceNotes.collect in main.jsx: hovering Collect explains the
+// document-vs-bookmark split the same way every slider explains itself.
+const collectNote = [
+  "Collect specimen",
+  0,
+  1,
+  1,
+  "Bookmarks this moment with a thumbnail into your on-device collection (16 max) for quick revisits. Handy, but not a file — Save above for the durable copy that survives a cleared browser.",
+  "orbius collection specimens bookmarks",
+];
 // One offscreen context, sequential recipes, no perpetual gallery render loops.
 export default function Library({
   recipes,
@@ -12,6 +22,7 @@ export default function Library({
   onSave,
   onLoad,
   onDelete,
+  tip,
 }) {
   const [previews, setPreviews] = useState({});
   const [previewError, setPreviewError] = useState(false);
@@ -116,7 +127,16 @@ export default function Library({
       </div>
       <div className="collection-heading">
         <span>YOUR SPECIMENS</span>
-        <button onClick={onSave}>+ Collect</button>
+        <button
+          aria-label="Collect this moment into your on-device collection"
+          onMouseEnter={() => tip?.show("persistence-collect", collectNote)}
+          onMouseLeave={() => tip?.hide()}
+          onFocus={() => tip?.show("persistence-collect", collectNote)}
+          onBlur={() => tip?.hide()}
+          onClick={onSave}
+        >
+          + Collect
+        </button>
       </div>
       {saved.length === 0 ? (
         <p className="empty-collection">

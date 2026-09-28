@@ -34,24 +34,23 @@ particles run live inside that shell, fitted to it, as contents the glass refrac
 alongside any dots or strata. One enclosure holds a simulation at a time; **Empty
 this enclosure** releases it.
 
-An **orb shader** is placed inside the shell as its **Inner shader**, at a size and
-offset you choose. It renders through the enclosure's camera rather than its own, so
-it is refracted and absorbed like anything else in there — Solar cartography at 0.4
-inside a clear orb is a sun under glass. An authored family travels with the piece
-and is added to this project, and so does the look it was saved with — palette, hue,
-emission, scale and every declared parameter — or the shell would render the same
-shader against this workspace's own defaults and the import would arrive unfinished.
-Choosing a family from the **Inner shader** dropdown instead inherits this
-workspace, since there is no other scene for it to have come from.
+An **orb shader** is placed inside the shell as its **inner shader** when you
+import the saved piece — the only way one gets in, since there is deliberately no
+picker for it. It renders through the enclosure's camera rather than its own, so it
+is refracted and absorbed like anything else in there. An authored family travels
+with the piece and is added to this project, and so does the look it was saved
+with — palette, hue, emission, scale and every declared parameter — or the shell
+would render the same shader against this workspace's own defaults and the import
+would arrive unfinished. Once placed, the shell's stack row names it and its
+section offers size, offset and removal; placing and every change after it are
+undoable like any other object change. There is still no picker — a new inner
+sun means importing another piece.
 
 Another **glass** composition adds its objects to the scene.
 
 The picker lists both places a piece can live: everything in your collection, and
 every project file in `saves/projects`. Collecting something never writes a project
 file, so listing only the folder hid every collected specimen.
-
-The same choice is available directly as **Inner shader** on any glass object, for a
-family already in the project.
 
 The shell is voxelized into an occupancy grid (64³, one box-blur pass) in the
 import worker. The solver samples that grid in local space each step and pushes

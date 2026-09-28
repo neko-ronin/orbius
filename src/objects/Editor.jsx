@@ -291,8 +291,8 @@ export default function ObjectEditor({
     );
   }
   // Anything saved can come in here. What it becomes depends on what it was: a
-  // particle piece is poured into this shell, an orb shader becomes the shell's
-  // inner shader, another glass composition adds its objects to this scene.
+  // particle piece is poured into this shell, an orb shader becomes its inner
+  // shader, another glass composition adds its objects to this scene.
   async function importSaved(project, label) {
     if (!current) return;
     let doc;
@@ -328,6 +328,10 @@ export default function ObjectEditor({
       );
       return;
     }
+    // The only way an orb shader gets inside a shell: import the saved piece and
+    // it becomes the shell's inner shader, look and all. There is deliberately no
+    // picker for this — a collection holds moments worth returning to, and an
+    // inner sun is one of those, not a setting to browse.
     if (doc.mode === "orb") {
       if (!doc.config.family) {
         setMessage(
@@ -451,15 +455,21 @@ export default function ObjectEditor({
       },
     );
   }
-  function duplicate() {
-    if (!current || objects.length >= MAX_OBJECTS) return;
+  // Duplication and deletion live on the stack rows, addressed by id rather
+  // than acting on whatever is selected — the row you hover is the row you act
+  // on. Both go through onChange, so object history undo covers them.
+  function duplicateObject(id) {
+    if (objects.length >= MAX_OBJECTS) return;
+    const source = objects.find((o) => o.id === id);
+    if (!source) return;
+    const base = { ...objectOptics, ...source };
     const copy = {
-      ...current,
+      ...base,
       id: crypto.randomUUID(),
-      name: `${current.name.slice(0, 70)} copy`,
-      position: [...current.position],
-      rotation: [...current.rotation],
-      scale: [...current.scale],
+      name: `${base.name.slice(0, 70)} copy`,
+      position: [...base.position],
+      rotation: [...base.rotation],
+      scale: [...base.scale],
     };
     try {
       validateObjects([...objects, copy]);
@@ -468,6 +478,19 @@ export default function ObjectEditor({
     } catch (e) {
       setMessage(e.message);
     }
+  }
+  function removeObject(id) {
+    const target = objects.find((o) => o.id === id);
+    if (!target) return;
+    onChange(objects.filter((o) => o.id !== id));
+    onSelect(objects.find((o) => o.id !== id)?.id || null);
+    notify(`Removed ${target.name}. Undo restores it.`);
+  }
+  function removeContents(id) {
+    onChange(
+      objects.map((o) => (o.id === id ? { ...o, contents: undefined } : o)),
+    );
+    notify("Inner shader removed. Undo restores it.");
   }
   // id names the field note; key names the value it writes, so a shell's density
   // and a dot cloud's opacity can describe themselves differently while editing the
@@ -619,9 +642,9 @@ export default function ObjectEditor({
       )}
       <div className="object-stack">
         {objects.map((o) => (
+          <React.Fragment key={o.id}>
           <div
             className={`object-row ${selected === o.id ? "selected" : ""}`}
-            key={o.id}
           >
             <button
               disabled={busy}
@@ -640,8 +663,27 @@ export default function ObjectEditor({
                         ? "Filled dot volume"
                         : "Surface dots"}{" "}
                   · {(o.triangles.length / 9).toLocaleString()} triangles
+                  {o.contents ? " · inner shader" : ""}
                 </small>
               </span>
+            </button>
+            <button
+              className="row-action"
+              disabled={busy || objects.length >= MAX_OBJECTS}
+              aria-label={`Duplicate ${o.name}`}
+              title="Duplicate"
+              onClick={() => duplicateObject(o.id)}
+            >
+              ⧉
+            </button>
+            <button
+              className="row-action danger"
+              disabled={busy}
+              aria-label={`Delete ${o.name}`}
+              title="Delete"
+              onClick={() => removeObject(o.id)}
+            >
+              ×
             </button>
             <button
               disabled={busy}
@@ -657,6 +699,34 @@ export default function ObjectEditor({
               {o.visible ? "◉" : "○"}
             </button>
           </div>
+          {o.role === "glass" && o.contents && (
+            <div
+              className={`object-row inner ${selected === o.id ? "selected" : ""}`}
+            >
+              <button
+                disabled={busy}
+                aria-pressed={selected === o.id}
+                aria-label={`Inner shader in ${o.name}: ${registry?.[o.contents.family]?.name ?? o.contents.family}`}
+                onClick={() => onSelect(o.id)}
+              >
+                <i style={{ background: o.color }} />
+                <span>
+                  ↳ {registry?.[o.contents.family]?.name ?? o.contents.family}
+                  <small>Inner shader · moves with the shell</small>
+                </span>
+              </button>
+              <button
+                className="row-action danger"
+                disabled={busy}
+                aria-label={`Remove inner shader from ${o.name}`}
+                title="Remove inner shader"
+                onClick={() => removeContents(o.id)}
+              >
+                ×
+              </button>
+            </div>
+          )}
+          </React.Fragment>
         ))}
       </div>
       {current && (
@@ -766,8 +836,61 @@ export default function ObjectEditor({
               <p className="mesh-formats">
                 {particleContainer === current.id
                   ? "A saved particle simulation is running inside this shell, with its placed fields fitted to it. Both travel with this project; Contained fields sets how hard the fields pull."
-                  : "Anything you have saved becomes what it can be: a particle piece is poured in and fitted to the shell, an orb shader is placed inside it, another glass composition adds its objects."}
+                  : "Anything you have saved becomes what it can be: a particle piece is poured in and fitted to the shell, an orb shader becomes its inner shader, another glass composition adds its objects."}
               </p>
+              {current.contents && (
+                <>
+                  <span className="eyebrow finish-eyebrow">INNER SHADER</span>
+                  <p className="mesh-formats">
+                    {registry?.[current.contents.family]?.name ??
+                      current.contents.family}{" "}
+                    lives in this shell. It arrived with a saved orb piece —
+                    move and scale it below, or remove it. There is no picker:
+                    a new inner sun means importing another piece.
+                  </p>
+                  <label className="object-slider">
+                    <span>
+                      Inner size<output>{current.contents.scale}</output>
+                    </span>
+                    <input
+                      type="range"
+                      aria-label="Inner size"
+                      min="0.05"
+                      max="2"
+                      step="0.01"
+                      value={current.contents.scale}
+                      onChange={(e) =>
+                        update("contents", {
+                          ...current.contents,
+                          scale: +e.target.value,
+                        })
+                      }
+                    />
+                  </label>
+                  <div className="object-transform">
+                    <span>Inner offset</span>
+                    <div>
+                      {[0, 1, 2].map((axis) => (
+                        <input
+                          key={axis}
+                          type="number"
+                          step="0.05"
+                          aria-label={`Inner offset ${"XYZ"[axis]}`}
+                          value={current.contents.offset[axis]}
+                          onChange={(e) => {
+                            const offset = [...current.contents.offset];
+                            offset[axis] = Math.max(
+                              -4,
+                              Math.min(4, +e.target.value || 0),
+                            );
+                            update("contents", { ...current.contents, offset });
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
             </>
           )}
           {current.role === "layers" && (
@@ -815,79 +938,6 @@ export default function ObjectEditor({
                   </button>
                 ))}
               </div>
-              {registry && (
-                <label className="material-select">
-                  <span>Inner shader</span>
-                  <select
-                    aria-label="Inner shader"
-                    value={current.contents?.family ?? ""}
-                    onChange={(e) =>
-                      update(
-                        "contents",
-                        e.target.value
-                          ? {
-                              family: e.target.value,
-                              scale: current.contents?.scale ?? 0.55,
-                              offset: current.contents?.offset ?? [0, 0, 0],
-                            }
-                          : undefined,
-                      )
-                    }
-                  >
-                    <option value="">Nothing</option>
-                    {Object.values(registry).map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-              {current.contents && (
-                <>
-                  <label className="object-slider">
-                    <span>
-                      Inner size<output>{current.contents.scale}</output>
-                    </span>
-                    <input
-                      type="range"
-                      aria-label="Inner size"
-                      min="0.05"
-                      max="2"
-                      step="0.01"
-                      value={current.contents.scale}
-                      onChange={(e) =>
-                        update("contents", {
-                          ...current.contents,
-                          scale: +e.target.value,
-                        })
-                      }
-                    />
-                  </label>
-                  <div className="object-transform">
-                    <span>Inner offset</span>
-                    <div>
-                      {[0, 1, 2].map((axis) => (
-                        <input
-                          key={axis}
-                          type="number"
-                          step="0.05"
-                          aria-label={`Inner offset ${"XYZ"[axis]}`}
-                          value={current.contents.offset[axis]}
-                          onChange={(e) => {
-                            const offset = [...current.contents.offset];
-                            offset[axis] = Math.max(
-                              -4,
-                              Math.min(4, +e.target.value || 0),
-                            );
-                            update("contents", { ...current.contents, offset });
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
               {range("opacity")}
               {range("ior")}
               {range("roughness")}
@@ -964,23 +1014,6 @@ export default function ObjectEditor({
               </div>
             </div>
           ))}
-          <div className="object-actions">
-            <button
-              disabled={objects.length >= MAX_OBJECTS}
-              onClick={duplicate}
-            >
-              Duplicate object
-            </button>
-            <button
-              onClick={() => {
-                onChange(objects.filter((o) => o.id !== current.id));
-                onSelect(objects.find((o) => o.id !== current.id)?.id || null);
-                notify("Object removed. Undo restores it.");
-              }}
-            >
-              Remove
-            </button>
-          </div>
         </fieldset>
       )}
       {!objects.length && (

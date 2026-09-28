@@ -57,6 +57,43 @@ const tools = [
   ["burst", "Shockwave", "B"],
   ["freeze", "Freeze field", "F"],
 ];
+// Field-note entries for the persistence trio, so hovering Save, Open or Collect
+// explains the document-vs-bookmark split the same way every slider explains
+// itself. Shape matches a parameter entry; the card reads label, note, terms.
+const persistenceNotes = {
+  open: [
+    "Open project",
+    0,
+    1,
+    1,
+    "Loads a saved composition — from the saves folder while developing, or any .orbius.json file from disk when deployed. The current scene stays put until the file validates.",
+    "orbius open project saves folder",
+  ],
+  save: [
+    "Save project",
+    0,
+    1,
+    1,
+    "Writes this composition as a portable .orbius.json file — ⌘/Ctrl S — to the saves folder while developing, to your downloads when deployed. This is the durable copy; the collection below holds bookmarks, not files.",
+    "orbius save project portable file",
+  ],
+  collect: [
+    "Collect specimen",
+    0,
+    1,
+    1,
+    "Bookmarks this moment with a thumbnail into your on-device collection (16 max) for quick revisits. Handy, but not a file — Save above for the durable copy that survives a cleared browser.",
+    "orbius collection specimens bookmarks",
+  ],
+  reset: [
+    "Reset",
+    0,
+    1,
+    1,
+    "Blank slate in this workspace — H. Settings return to entry values; fields, objects, shader and graph edits are cleared. The mode stays put, so this replaces a browser refresh. Asks first.",
+    "orbius reset workspace blank slate",
+  ],
+};
 // A marker follows its field through the scene, so it moves on every frame the
 // camera does, autorotate included, and is written to directly rather than through
 // a React render. Nearer is larger; behind the eye there is nothing to click.
@@ -675,6 +712,37 @@ function App() {
     setFields([]);
     notify("Simulation restarted. Fields cleared.");
   }
+  // Back to a blank slate in the current workspace: entry settings, no fields,
+  // no objects, the stock shader and graph — but the same mode, no reload. This
+  // is destructive, so it asks first; object edits stay undoable afterwards.
+  function resetScene() {
+    if (
+      !window.confirm(
+        "Reset this workspace to a blank slate? Fields, objects and edits will be cleared.",
+      )
+    )
+      return;
+    const entry =
+      mode === "particles" || mode === "nodes"
+        ? { ...defaults }
+        : { ...defaults, ...materialBase };
+    setConfig(entry);
+    setFields([]);
+    setObjects([]);
+    setSelectedObject(null);
+    setParticleContainer(null);
+    engine.current?.setContainer(null);
+    engine.current?.reset(entry);
+    if (mode === "nodes") setGraph(structuredClone(initialGraph));
+    setShader(defaultShader);
+    setCompiled(defaultShader);
+    setShaderError("");
+    setName(mode === "glass" ? "Untitled composition" : "Event horizon");
+    setShow(false);
+    setPaused(false);
+    setDirty(false);
+    notify("Workspace reset. Fresh slate, same page.");
+  }
   // Compiling and linking this shader measures about a millisecond, so this waits
   // for a pause in typing rather than rationing an expensive operation. 350ms is
   // roughly the gap between words: the render stays one thought behind the text
@@ -787,7 +855,8 @@ function App() {
       else if (k === "x") {
         setFields([]);
         notify("All fields cleared.");
-      } else if (k === "?") setHelp((h) => !h);
+      } else if (k === "h") resetScene();
+      else if (k === "?") setHelp((h) => !h);
       else {
         const found = tools.find((t) => t[2].toLowerCase() === k);
         if (found) {
@@ -985,15 +1054,7 @@ function App() {
               "emission",
               ...(config.family === "composer" ? ["reflection"] : []),
             ]
-          : config.family === "solar"
-            ? [
-                "materialScale",
-                "surfaceActivity",
-                "emission",
-                "reactionFeed",
-                "reactionKill",
-              ]
-            : [
+          : [
                 "materialScale",
                 "materialFold",
                 "interiorMotion",
@@ -1077,7 +1138,11 @@ function App() {
         </nav>
         <div className="top-actions">
           <button
-            title="Open a project from the saves folder"
+            aria-label="Open a project"
+            onMouseEnter={() => tip.show("persistence-open", persistenceNotes.open)}
+            onMouseLeave={tip.hide}
+            onFocus={() => tip.show("persistence-open", persistenceNotes.open)}
+            onBlur={tip.hide}
             onClick={async () => {
               // The saves folder is where Save writes, so it is where Open looks
               // first. A file from anywhere else is still one click away.
@@ -1089,9 +1154,27 @@ function App() {
             <Icon name="folder" />
             Open
           </button>
-          <button title="Save project · ⌘/Ctrl S" onClick={save}>
+          <button
+            aria-label="Save project · ⌘/Ctrl S"
+            onMouseEnter={() => tip.show("persistence-save", persistenceNotes.save)}
+            onMouseLeave={tip.hide}
+            onFocus={() => tip.show("persistence-save", persistenceNotes.save)}
+            onBlur={tip.hide}
+            onClick={save}
+          >
             <Icon name="save" />
             Save
+          </button>
+          <button
+            aria-label="Reset workspace · H"
+            onMouseEnter={() => tip.show("persistence-reset", persistenceNotes.reset)}
+            onMouseLeave={tip.hide}
+            onFocus={() => tip.show("persistence-reset", persistenceNotes.reset)}
+            onBlur={tip.hide}
+            onClick={resetScene}
+          >
+            <Icon name="expand" />
+            Reset
           </button>
           <button
             className="show-button"
@@ -1114,6 +1197,7 @@ function App() {
             onSave={collect}
             onLoad={apply}
             onDelete={deleteSpecimen}
+            tip={tip}
             onChoose={(r) => {
               const c = {
                 ...defaults,
@@ -1973,6 +2057,7 @@ function App() {
                   ["High-res PNG", "P"],
                   ["Record / stop (30s max)", "C"],
                   ["Save to disk", "⌘/Ctrl S"],
+                  ["Reset workspace", "H"],
                   ["Open this guide", "?"],
                 ].map(([l, k]) => (
                   <div className="shortcut" key={k}>

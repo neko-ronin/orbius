@@ -183,7 +183,7 @@ test("only nodes connected to the output modify the render", () => {
   assert.equal(r.config.bloom, 0.9);
   assert.equal(r.config.twist, defaults.twist);
   assert.deepEqual(r.active, ["source", "flow", "glow", "out"]);
-  assert.equal(defaults.turbulence, 0.45);
+  assert.equal(defaults.turbulence, 0);
 });
 test("disconnected output and cyclic graphs cannot evaluate", () => {
   assert.throws(() => resolveGraph({ ...initialGraph, edges: [] }, defaults));
@@ -295,12 +295,17 @@ test("composed shader families round trip and reject invalid operators", () => {
   assert.equal(validateProject(zero).config.family, "");
   for (const [n, id] of Object.entries({
     1: "silk",
-    2: "solar",
     3: "mercury",
   })) {
     const f = fixture();
     f.config.family = +n;
     assert.equal(validateProject(f).config.family, id);
+  }
+  // 2 was Solar cartography, removed: it must fail loudly, not become another family.
+  {
+    const f = fixture();
+    f.config.family = 2;
+    assert.throws(() => validateProject(f), /Unknown material family/);
   }
 
   const p = fixture();
@@ -578,9 +583,9 @@ test("a shell can hold a family, placed, and loses the reference if the family i
   const builtin = fixture();
   builtin.mode = "glass";
   builtin.objects = [
-    { ...shell, contents: { ...shell.contents, family: "solar" } },
+    { ...shell, contents: { ...shell.contents, family: "mercury" } },
   ];
-  assert.equal(validateProject(builtin).objects[0].contents.family, "solar");
+  assert.equal(validateProject(builtin).objects[0].contents.family, "mercury");
 
   // The look travels with it. Without this a shell renders an imported family
   // against the glass workspace's own palette and scale, which is the same shader

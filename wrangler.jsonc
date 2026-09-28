@@ -1,0 +1,13 @@
+{
+  // Cloudflare Workers Static Assets config for orbius.
+  // Pure static SPA: no Worker script (`main`), no bindings, no secrets.
+  // Deploy with `wrangler deploy` after `npm run build` (requires login).
+  // See docs/DEPLOY_AUDIT_PLAN.md Phase 3.
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "orbius",
+  "compatibility_date": "2026-09-28",
+  "assets": {
+    "directory": "./dist"
+  },
+  "routes": [{ "pattern": "orbius.catronin.com", "custom_domain": true }]
+}

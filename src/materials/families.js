@@ -178,52 +178,6 @@ vec4 medium(vec3 q){
 }`,
   },
   {
-    id: "solar",
-    name: "Solar cartography",
-    kind: "surface",
-    glsl: `#define HAS_HALO
-// @control corona 0 1.5 0.05 "How far the atmosphere reaches past the limb. Streamers grow from wherever the surface is active, so a quiet star keeps a thin ring." "corona atmosphere prominence limb"
-// @default corona 0.6
-float displace(vec3 p){return 0.;}
-// The pole is where atan(0,0) is undefined, on the surface and above it alike.
-vec2 sphereMap(vec3 d){
- return vec2(atan(d.z,abs(d.x)<1e-5&&abs(d.z)<1e-5?1.:d.x)/6.283185+.5,
-  acos(clamp(d.y,-1.,1.))/3.141593);
-}
-vec3 halo(vec3 ro,vec3 rd){
- // Closest approach to the star. Behind the camera there is nothing to glow.
- float t=-dot(ro,rd);
- if(t<=0.)return vec3(0.);
- vec3 near=ro+rd*t;float d=length(near);
- if(d<1.)return vec3(0.);
- vec3 dir=near/d;
- // Anchored to the chemistry, so a streamer stands over an active region rather
- // than being an even shell of fog.
- float act=texture(uChemistry,sphereMap(dir)).g;
- float reach=.05+act*.45*uCorona;
- float glow=exp(-(d-1.)/max(reach,.015));
- float flicker=.65+.35*noise(dir*11.+uTime*uInteriorMotion*.5);
- return mix(vec3(1.,.42,.1),uColorA,.3)*glow*flicker*uEmission*uCorona*.5;
-}
-vec3 surface(vec3 p,vec3 n,vec3 rd,float fres){
- vec3 q=p*uMaterialScale;
- vec2 sphereUV=sphereMap(p);
- float chemical=texture(uChemistry,sphereUV).g;
- float grain=fbm(q*2.)*.12+fbm(q*7.)*.05;
- float f=chemical*1.5+grain;
- float front=1.-smoothstep(.025,.075,abs(f-uSurfaceActivity*.65));
- vec2 tx=1./vec2(textureSize(uChemistry,0));
- vec2 g=vec2(texture(uChemistry,sphereUV+vec2(tx.x,0)).g-texture(uChemistry,sphereUV-vec2(tx.x,0)).g,
-             texture(uChemistry,sphereUV+vec2(0,tx.y)).g-texture(uChemistry,sphereUV-vec2(0,tx.y)).g);
- float relief=clamp(.7+(g.x*.8-g.y*.55)*5.,0.,1.5);
- vec3 crust=vec3(.03,.014,.01)*(.35+noise(q*12.)*.9)*relief;
- // A luminous body darkens toward its limb rather than brightening.
- float limb=pow(max(0.,dot(n,-rd)),.55);
- vec3 c=(crust+mix(uColorA,uColorC,front)*front*uEmission*1.15*relief)*mix(.3,1.,limb);
- return c+vec3(.9,.3,.08)*pow(1.-limb,2.5)*uEmission*.18;
-}`,
-  },
-  {
     id: "mercury",
     name: "Liquid mercury",
     kind: "surface",
@@ -271,8 +225,10 @@ vec4 medium(vec3 q){
 ];
 export const familyById = Object.fromEntries(builtins.map((f) => [f.id, f]));
 // Saved projects carry the old integer. Nothing in a file should have to change for
-// a refactor that is supposed to be invisible.
-export const LEGACY = { 1: "silk", 2: "solar", 3: "mercury", 4: "composer" };
+// a refactor that is supposed to be invisible. 2 was Solar cartography, removed;
+// a file naming it now fails validation with "Unknown material family" instead of
+// quietly becoming something else.
+export const LEGACY = { 1: "silk", 3: "mercury", 4: "composer" };
 
 // What a new family starts as. Enough to compile and show something, so the first
 // thing an author sees is a working object rather than an error.

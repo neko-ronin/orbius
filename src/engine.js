@@ -614,17 +614,6 @@ export class Engine {
         this.previousConfig = c;
       }
     } else if (this.mode === "glass") {
-      // A shell holding Solar cartography needs its field stepped here too, or the
-      // pattern it samples is frozen at whatever the last orb frame left.
-      const star = (this.objects || []).find(
-        (o) => o.contents?.family === "solar",
-      );
-      if (star)
-        this.chemistry.advance(
-          dt,
-          star.contents.look?.reactionFeed ?? c.reactionFeed,
-          star.contents.look?.reactionKill ?? c.reactionKill,
-        );
       const held = this.contained();
       if (held) simulate();
       // Rendering a family inside a shell: the same program the orb workspace uses,
@@ -634,9 +623,8 @@ export class Engine {
         if (!family) return;
         const program = this.familyProgram(family);
         if (!program) return;
-        // How the family looked where it was made, when it was imported from a save.
-        // Falling back to this workspace's own material settings is what a family
-        // chosen from the dropdown gets, since there is no other scene to inherit.
+        // How the family looked where it was made, imported with the save. Any
+        // setting the look does not carry falls back to this workspace's own.
         const look = contents.look || {};
         const of = (key) => look[key] ?? c[key];
         const inner =
@@ -715,10 +703,8 @@ export class Engine {
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.targets[this.trailRead].fb);
         gl.clearColor(0.003, 0.005, 0.009, 1);
         gl.clear(gl.COLOR_BUFFER_BIT);
-      } else {
-        if (c.family === "solar")
-          this.chemistry.advance(dt, c.reactionFeed, c.reactionKill);
-        gl.activeTexture(gl.TEXTURE1);
+        } else {
+          gl.activeTexture(gl.TEXTURE1);
         gl.bindTexture(gl.TEXTURE_2D, this.chemistry.texture);
         gl.activeTexture(gl.TEXTURE0);
         gl.viewport(0, 0, w, h);

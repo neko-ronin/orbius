@@ -2242,6 +2242,14 @@ input[type="color"] {
   border-color: #a3c8ac;
   background: #202c25;
 }
+/* A shell's inner shader nests under its row: a locator, not an object, so it
+   selects the shell and its section rather than inventing a second selection. */
+.object-row.inner {
+  margin-top: 4px;
+  margin-left: 22px;
+  border-style: dashed;
+  background: #131915;
+}
 .object-row > button:first-child {
   min-width: 0;
   flex: 1;
@@ -2265,6 +2273,32 @@ input[type="color"] {
   height: 22px;
   flex-shrink: 0;
   border-radius: 3px;
+}
+/* Stack actions hide until needed: hover, keyboard focus, or a selected row
+   (tap selects, so touch gets them too). The visibility eye always shows — it
+   is state, not an action. */
+.object-row .row-action {
+  opacity: 0;
+  pointer-events: none;
+  padding: 10px 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.object-row:hover .row-action,
+.object-row:focus-within .row-action,
+.object-row.selected .row-action {
+  opacity: 1;
+  pointer-events: auto;
+}
+.object-row .row-action:hover {
+  color: #fff;
+}
+.object-row .row-action.danger:hover {
+  color: #ff7a7a;
+}
+.object-row .row-action:disabled {
+  opacity: 0;
+  pointer-events: none;
 }
 .object-properties {
   border: 0;

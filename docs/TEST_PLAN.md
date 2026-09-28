@@ -140,13 +140,13 @@ before destructive cases, and put it back.
 
 | ID | Check | Expect |
 |---|---|---|
-| ORB-01 | Each built-in family (Prismatic silk, Solar cartography, Liquid mercury, Composed fields) | Renders; no console error; GPU time reported |
+| ORB-01 | Each built-in family (Prismatic silk, Liquid mercury, Composed fields) | Renders; no console error; GPU time reported |
 | ORB-02 | Family dropdown | Lists every registered family plus `Custom GLSL surface` |
 | ORB-03 | Switch family | Its declared controls replace the previous family's; values persist per family |
 | ORB-04 | Material structure, Light & finish, Camera controls | Each changes the image |
 | ORB-05 | Key / Fill / Back light sections | Moving a light sweeps its highlight; colour is Kelvin-like; intensity and drift behave |
-| ORB-06 | Solar cartography, rotated a full turn | No seam; no pole artefact; cells are granular, not a dozen boulders |
-| ORB-07 | Solar `Corona` | 0 is off; low values a thin rim; high values streamers standing over active regions |
+| ORB-06 | RETIRED — Solar cartography removed; no family needs the pole/seam check | — |
+| ORB-07 | RETIRED — Solar cartography removed with its `Corona` control | — |
 | ORB-08 | Liquid mercury | The silhouette deforms as it turns — not a painted ball |
 | ORB-09 | Composed fields designer | Field A/B, composition, and each composer control change the result |
 | ORB-10 | `Enclosure` at 0 on a volume family | The bounding sphere stops reflecting; only the volume remains |
@@ -245,16 +245,16 @@ before destructive cases, and put it back.
 | GLS-25 | `+ Load a saved creation` | Lists **both** collected specimens and saved project files, by name, deduplicated |
 | GLS-26 | Load a particle piece | Runs inside the shell, fitted to it; the panel says so |
 | GLS-27 | Load a particle piece into a **hollow** shell | Fills the cavity, not the wall |
-| GLS-28 | Load an orb shader | Becomes the shell's inner shader |
+| GLS-28 | Load an orb shader | Becomes the shell's inner shader — the only way one gets in; there is no picker |
 | GLS-29 | An imported orb shader's appearance | Matches how it looked in the orb workspace — palette, emission, scale, declared parameters — allowing for the shell's own optics and stage |
 | GLS-30 | Load an orb piece with an authored family | The family comes with it, with a fresh id |
 | GLS-31 | Load a glass composition | Its objects are added to the scene |
 | GLS-32 | Load a piece whose mode has nowhere to go | A clear message, no change |
-| GLS-33 | `Inner shader` dropdown | Selects any registered family; inherits this workspace's settings |
-| GLS-34 | Switch inner shader after importing one | Does not dress the new family in the old one's settings |
-| GLS-35 | Inner size and inner offset | Both move and scale the contained family |
+| GLS-33 | RETIRED — no picker for inner shaders; importing a saved orb piece is the only path in | — |
+| GLS-34 | RETIRED — no picker for inner shaders | — |
+| GLS-35 | Inner size and inner offset | Both move and scale the contained family; removing it leaves a plain shell |
 | GLS-36 | `Empty this enclosure` | Releases a contained simulation |
-| GLS-37 | Solar cartography inside a shell | Its corona stays local to the object, not washed across the frame |
+| GLS-37 | RETIRED — Solar cartography removed; inner-shader feature removed | — |
 | GLS-38 | `From a file elsewhere…` | Opens the native picker as a fallback |
 
 ---

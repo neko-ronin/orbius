@@ -175,6 +175,8 @@ export const materialSections = {
     ["Render quality", ["devScale", "showScale"]],
   ],
 };
+// Gallery shortcuts: a family selection plus slider values. Every family stays
+// choosable from the Shader family dropdown regardless.
 export const materialPresets = [
   {
     id: "silk",
@@ -187,20 +189,6 @@ export const materialPresets = [
       materialFold: 0.65,
       materialScale: 3.2,
       emission: 1.5,
-    },
-  },
-  {
-    id: "corona",
-    name: "Solar cartography",
-    tag: "LUMINOUS SURFACE",
-    mode: "orb",
-    values: {
-      family: "solar",
-      palette: 1,
-      materialScale: 4.8,
-      surfaceActivity: 0.48,
-      bloom: 0.45,
-      emission: 2,
     },
   },
   {

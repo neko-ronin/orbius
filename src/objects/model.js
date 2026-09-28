@@ -170,6 +170,7 @@ export function newObject(name, triangles, points, info, role = "glass") {
     pointSize: 2,
   };
 }
+
 // What a family looked like in the workspace it was made in. Without this a shell
 // renders the family against the *glass* workspace's palette, emission and scale —
 // same shader, none of the choices — which is why an imported orb arrived looking
@@ -249,7 +250,9 @@ export function validateObjects(objects) {
     }
     // A shell may hold a shader family, placed in its own space: "a sun inside a
     // glass orb" is the family's unit sphere, scaled and offset, rendered through
-    // this workspace's camera and then refracted like any other contents.
+    // this workspace's camera and then refracted like any other contents. The
+    // only way one gets in is importing a saved orb piece; there is deliberately
+    // no second interface for picking one directly.
     if (o.contents !== undefined && o.contents !== null) {
       const c = o.contents;
       const look = validateLook(c.look);
