@@ -616,13 +616,86 @@ export class Engine {
     } else if (this.mode === "glass") {
       const held = this.contained();
       if (held) simulate();
+      // Floor polish as a number the shaders reuse: the mirrored pass fades the
+      // way a real reflection loses itself in the surface, and a matte sweep
+      // swallows it entirely. Kept in one place so dots, families, particles and
+      // shells all agree on how reflective the floor is.
+      const smooth01 = (a, b, x) => {
+        const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+        return t * t * (3 - 2 * t);
+      };
+      const reflectStrength =
+        (c.reflections ?? 1) > 0.5
+          ? 1.15 * (1 - smooth01(0.08, 0.85, c.stageRoughness))
+          : 0;
+      // One-bounce colour transport: fit each emissive contributor as a point
+      // light (colour + intensity + position) for the floor and the shells to read.
+      // Kept out of `shared` on purpose — e.set() would misbind the arrays, so the
+      // renderer binds them explicitly as v4s alongside the rig.
+      const bounce = (() => {
+        const color = new Float32Array(32),
+          pos = new Float32Array(32);
+        let n = 0;
+        const push = (r, g2, b, intensity, p) => {
+          if (n >= 8 || !(intensity > 0.01)) return;
+          color.set([r, g2, b, intensity], n * 4);
+          pos.set([p[0], p[1], p[2], 0], n * 4);
+          n++;
+        };
+        const avg = (hexes) => {
+          let r = 0, g2 = 0, b = 0;
+          for (const hex of hexes) {
+            r += parseInt(hex.slice(1, 3), 16) / 255;
+            g2 += parseInt(hex.slice(3, 5), 16) / 255;
+            b += parseInt(hex.slice(5, 7), 16) / 255;
+          }
+          return [r / hexes.length, g2 / hexes.length, b / hexes.length];
+        };
+        for (const o of this.objects || []) {
+          if (!o.visible) continue;
+          if (o.role === "glass" && o.contents) {
+            if (!this.registry[o.contents.family]) continue;
+            const look = o.contents.look || {};
+            const pal = palettes[look.palette ?? c.palette] ?? palettes[0];
+            const [r, g2, b] = avg(pal.colors);
+            const emission = look.emission ?? c.emission ?? 1.5;
+            push(
+              r,
+              g2,
+              b,
+              emission * 0.35 * o.contents.scale * o.contents.scale,
+              [
+                o.position[0] + o.contents.offset[0],
+                o.position[1] + o.contents.offset[1],
+                o.position[2] + o.contents.offset[2],
+              ],
+            );
+          } else if (o.role !== "glass") {
+            push(
+              parseInt(o.color.slice(1, 3), 16) / 255,
+              parseInt(o.color.slice(3, 5), 16) / 255,
+              parseInt(o.color.slice(5, 7), 16) / 255,
+              (o.emission ?? 0) * (o.opacity ?? 0.5) * 0.5,
+              o.position,
+            );
+          }
+        }
+        if (held && this.container) {
+          const [r, g2, b] = avg(palettes[c.palette]?.colors ?? palettes[0].colors);
+          push(r, g2, b, 0.8, this.container.position);
+        }
+        return { color, pos };
+      })();
       // Rendering a family inside a shell: the same program the orb workspace uses,
       // told to take this workspace's camera and a placement instead of its own.
-      const drawFamily = (contents, place) => {
+      // Mirrored, it marches the same sphere from a placement below the floor at
+      // half the steps: the floor's memory of the shader, not a second show render.
+      const drawFamily = (contents, place, opts = {}) => {
         const family = this.registry[contents.family];
         if (!family) return;
         const program = this.familyProgram(family);
         if (!program) return;
+        const mirror = opts.mirror ? 1 : 0;
         // How the family looked where it was made, imported with the save. Any
         // setting the look does not carry falls back to this workspace's own.
         const look = contents.look || {};
@@ -652,6 +725,9 @@ export class Engine {
           uEnclosure: 0,
           uPlace: place,
           uPlaceScale: contents.scale,
+          uMirror: mirror,
+          uStageFloor: c.stageFloor,
+          uReflectStrength: opts.reflectStrength ?? reflectStrength,
         });
         for (const key of Object.keys(materialDefaults)) {
           // family has no uniform; enclosure is decided above, not by the scene.
@@ -668,7 +744,13 @@ export class Engine {
         for (const [name, fallback] of Object.entries(declared.defaults))
           this.uniform(program, uniformName(name), chosen[name] ?? fallback);
         this.uniform(program, "uChemistry", 1, "int");
-        this.uniform(program, "uSteps", this.show ? 160 : 88, "int");
+        const fullSteps = this.show ? 160 : 88;
+        this.uniform(
+          program,
+          "uSteps",
+          mirror ? Math.max(24, Math.ceil(fullSteps / 2)) : fullSteps,
+          "int",
+        );
         this.uniform(program, "uLightDir[0]", rig.direction, "v4");
         this.uniform(program, "uLightColor[0]", rig.color, "v4");
         gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -681,19 +763,43 @@ export class Engine {
         h,
         this.targets[this.trailRead].fb,
         held &&
-          (() => {
+          ((mirror = false) => {
+            // Direct, the live points join the trail history so the shells refract
+            // it; mirrored, the accumulator is already bound and the live points
+            // join the floor reflection with no history — a trail is screen-space
+            // and cannot be mirrored.
+            if (mirror) {
+              this.set(this.particles, {
+                ...shared,
+                ...camera,
+                uLife: c.life,
+                uSize: c.size,
+                uPixelRatio: w / rect.width,
+                uMirror: 1,
+                uStageFloor: c.stageFloor,
+                uReflectStrength: reflectStrength,
+              });
+              this.fields(this.particles, this.fieldList || []);
+              gl.bindVertexArray(this.vaos[this.read]);
+              gl.drawArrays(gl.POINTS, 0, this.count);
+              return;
+            }
             this.set(this.particles, {
               ...shared,
               ...camera,
               uLife: c.life,
               uSize: c.size,
               uPixelRatio: w / rect.width,
+              uMirror: 0,
+              uStageFloor: c.stageFloor,
+              uReflectStrength: 1,
             });
             this.fields(this.particles, this.fieldList || []);
             gl.bindVertexArray(this.vaos[this.read]);
             gl.drawArrays(gl.POINTS, 0, this.count);
           }),
         drawFamily,
+        { bounce, reflectStrength },
       );
     } else if (this.mode === "orb" && this.registry[c.family]) {
       const family = this.registry[c.family];

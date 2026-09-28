@@ -97,16 +97,17 @@ export const particleVertex = `#version 300 es
 precision highp float;
 layout(location=0) in vec4 aPosition;layout(location=1) in vec4 aVelocity;
 uniform float uTilt,uRotation,uAspect,uZoom,uSize,uPixelRatio,uLife,uHue,uEye,uProjScale;
+uniform float uMirror,uStageFloor,uReflectStrength;
 uniform vec3 uColorA,uColorB,uColorC;
 uniform float uSpeciesEnabled;
 ${fieldGLSL}
 uniform vec3 uFieldColors[12];
 out vec3 color;out float alpha;
-void main(){float c=cos(uRotation),s=sin(uRotation),ct=cos(uTilt),st=sin(uTilt);vec3 p=mat3(c,0,-s,0,1,0,s,0,c)*aPosition.xyz;p=mat3(1,0,0,0,ct,st,0,-st,ct)*p;float z=max(1.,uEye-p.z);vec2 screen=p.xy*uProjScale*uZoom/vec2(uAspect,1.)/z;gl_Position=vec4(screen,clamp(z/12.,0.,1.),1);
+void main(){float c=cos(uRotation),s=sin(uRotation),ct=cos(uTilt),st=sin(uTilt);vec3 wp=aPosition.xyz;if(uMirror>.5){wp.y=2.*uStageFloor-wp.y;}vec3 p=mat3(c,0,-s,0,1,0,s,0,c)*wp;p=mat3(1,0,0,0,ct,st,0,-st,ct)*p;float z=max(1.,uEye-p.z);vec2 screen=p.xy*uProjScale*uZoom/vec2(uAspect,1.)/z;gl_Position=vec4(screen,clamp(z/12.,0.,1.),1);
  gl_PointSize=clamp(uSize*uPixelRatio*4./z,1.,32.);
  float f=fract(aVelocity.w*.013+length(aPosition.xyz)*.17+uHue);color=f<.5?mix(uColorA,uColorB,f*2.):mix(uColorB,uColorC,(f-.5)*2.);
  if(uSpeciesEnabled>.5){int species=int(mod(floor(aVelocity.w),3.));color=species==0?vec3(1.,.5,.08):species==1?vec3(.08,.8,1.):vec3(1.,.15,.5);}
- alpha=smoothstep(0.,.6,aPosition.w)*(1.-smoothstep(uLife*.75,uLife,aPosition.w))*(uSpeciesEnabled>.5?.07:.14);
+ alpha=smoothstep(0.,.6,aPosition.w)*(1.-smoothstep(uLife*.75,uLife,aPosition.w))*(uSpeciesEnabled>.5?.07:.14)*mix(1.,uReflectStrength,clamp(uMirror,0.,1.));
  // In scene units, the falloff the screen-space glow had at zoom 1.
  for(int i=0;i<12;i++){if(i>=uFieldCount)break;if(int(uFieldExtra[i].x)==3){vec3 d=fieldDelta(i,aPosition.xyz);color+=uFieldColors[i]*exp(-dot(d,d)/(uFieldAxis[i].w*.76))*uFields[i].w;}}
 }`;

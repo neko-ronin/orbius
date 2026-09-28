@@ -44,11 +44,15 @@ vec3 p=camera*w;float d=4.-p.z;
 vLocal=local;vView=vec3(p.xy,-d);vNormal=camera*nm;vDepth=d;gl_Position=vec4(p.x*2.5*uZoom/uAspect,p.y*2.5*uZoom,(20.1/19.9)*d-(4./19.9),d);gl_PointSize=clamp(uPointSize*uPixelRatio*3.5/max(d,.1),1.,32.);}`;
 const dots = `#version 300 es
 precision highp float;in float vDepth;in vec3 vLocal;out vec4 frag;uniform vec3 uTint,uColorTop;uniform float uEmission,uOpacity,uGradient,uFlow,uSparkles,uTime;
+uniform float uMirror,uReflectStrength;
 void main(){float r=length(gl_PointCoord-.5)*2.;if(r>1.)discard;
 float h=fract(sin(dot(vLocal,vec3(127.1,311.7,74.7)))*43758.5453);
 float wave=.78+.22*sin(vLocal.x*7.+vLocal.z*5.+uTime*uFlow*3.);
 float spark=step(1.-uSparkles*.025,h)*pow(.5+.5*sin(uTime*uFlow*2.+h*97.),8.)*6.;
 float a=exp(-r*r*4.)*.6*uEmission*uOpacity*exp(-max(vDepth-3.,0.)*.12);
+// Mirrored, the dots are the floor's memory of the cloud: same additive points,
+// faded with the floor's polish like the shells are.
+a*=mix(1.,uReflectStrength,clamp(uMirror,0.,1.));
 vec3 color=mix(uTint,uColorTop,smoothstep(-.35,.5,vLocal.y)*uGradient);
 float peak=pow(.5+.5*sin(vLocal.x*7.+vLocal.z*5.),8.);
 frag=vec4((color*wave*(1.+peak*1.8)+vec3(spark))*a,a);}`;
@@ -79,7 +83,20 @@ float seed(vec3 p,float size){vec3 i=floor(p),f=fract(p);
 // across a shell as you move are most of what separates glass from a painted ball.
 const world = `
 uniform sampler2D uFootprint;uniform float uStageExtent;
+uniform vec4 uBounceColor[8];uniform vec4 uBouncePos[8];uniform float uBounceStrength;
 ${studioRig}
+// What the emissive contents throw at the world: up to eight point lights fitted
+// on the CPU to the dot clouds and inner shaders. A full secondary transport is
+// what a path tracer does; this is the one-bounce approximation that reads as one.
+vec3 bounceLight(vec3 p,vec3 n){
+ vec3 s=vec3(0.);
+ for(int i=0;i<8;i++){
+  float w=uBounceColor[i].w;
+  if(w<=0.)continue;
+  vec3 toB=uBouncePos[i].xyz-p;float d=length(toB);vec3 dir=toB/max(d,1e-3);
+  float att=w/(1.+d*d*1.4);
+  s+=uBounceColor[i].rgb*att*(.4+.6*max(dot(n,dir),0.));}
+ return s*uBounceStrength;}
 // The stage floor, as an analytic plane rather than geometry: it is infinite, it
 // needs no depth, and refraction through a shell bends a real horizon instead of
 // a flat gradient.
@@ -124,9 +141,11 @@ vec3 stage(vec3 eye,vec3 dir,float floorY,float rough,float lit){
   tone*=1.+(tooth-.5)*amount*.5-scuff*amount*.14;}
  // Sheen: the rig reflected in the floor is what draws the light pools, and they
  // travel when a light moves because they are the same function.
- vec3 sheen=envLight(reflect(dir,n),polish);
- vec3 ambient=envLight(vec3(0,1,0),1.)+envLight(normalize(vec3(dir.x,.6,dir.z)),.85);
- vec3 surface=(tone*ambient*(1.-shade*.82)+sheen*mix(1.1,.12,polish)*(1.-shade*.55))*lit;
+  vec3 sheen=envLight(reflect(dir,n),polish);
+  vec3 ambient=envLight(vec3(0,1,0),1.)+envLight(normalize(vec3(dir.x,.6,dir.z)),.85);
+  vec3 surface=(tone*ambient*(1.-shade*.82)+sheen*mix(1.1,.12,polish)*(1.-shade*.55))*lit;
+  // Colour spill: an emissive body standing on the sweep pools its own light on it.
+  surface+=tone*bounceLight(hit,n)*(1.-shade*.55)*lit;
  // The seam where the floor meets the far wall: a real horizon for a shell to
  // bend, which a screen-space gradient can never give it.
  float far=smoothstep(3.5,9.,length(hit.xz-eye.xz));
@@ -224,10 +243,12 @@ void main(){vec3 n=normalize(vNormal),view=normalize(-vView);
  // backdrop control dims what the camera sees directly, never what the glass sees.
  mat3 inv=transpose(viewMatrix(uTilt,uRotation));
  vec3 posW=inv*(vView+vec3(0,0,4.));
- vec3 reflection=stage(posW,inv*reflect(-view,n),uStageFloor,uRoughness,1.)*uStudioLight;
- // Grazing sheen: the thin bright edge a real shell shows against a dark studio.
- reflection+=mix(vec3(.6,.72,1.),uTint,.35)*pow(1.-nv,6.)*uStudioLight*.4;
- frag=vec4(contents*absorption*(1.-f)+reflection*f,1.);
+  vec3 reflection=stage(posW,inv*reflect(-view,n),uStageFloor,uRoughness,1.)*uStudioLight;
+  // Grazing sheen: the thin bright edge a real shell shows against a dark studio.
+  reflection+=mix(vec3(.6,.72,1.),uTint,.35)*pow(1.-nv,6.)*uStudioLight*.4;
+  // Neighbouring emitters tint the shell: the colour of one object sitting in another's.
+  reflection+=bounceLight(posW,n);
+  frag=vec4(contents*absorption*(1.-f)+reflection*f,1.);
 }`;
 export class ObjectRenderer {
   constructor(engine) {
@@ -435,7 +456,7 @@ export class ObjectRenderer {
       g.clear(g.COLOR_BUFFER_BIT);
     }
   }
-  render(objects, config, shared, w, h, target, drawContents, drawFamily) {
+  render(objects, config, shared, w, h, target, drawContents, drawFamily, extra = {}) {
     const e = this.engine,
       g = e.gl;
     // The rig is resolved once per frame on the CPU: kelvin, drift and flicker are
@@ -445,6 +466,17 @@ export class ObjectRenderer {
       e.uniform(program, "uLightDir[0]", rig.direction, "v4");
       e.uniform(program, "uLightColor[0]", rig.color, "v4");
     };
+    // One-bounce colour transport, fitted on the CPU in the engine: the emissive
+    // contents as up to eight point lights. Bound with explicit v4 types, the way
+    // the rig is, because e.set() only knows scalars and small vectors.
+    const bounce = extra.bounce;
+    const bindBounce = (program) => {
+      if (!bounce) return;
+      e.uniform(program, "uBounceColor[0]", bounce.color, "v4");
+      e.uniform(program, "uBouncePos[0]", bounce.pos, "v4");
+      e.uniform(program, "uBounceStrength", config.bounce ?? 0);
+    };
+    const reflectStrength = extra.reflectStrength ?? 0;
     const clock = e.timer;
     this.sync(objects);
     this.resize(w, h);
@@ -492,6 +524,7 @@ export class ObjectRenderer {
       });
       e.uniform(this.backdrop, "uFootprint", 6, "int");
       bindRig(this.backdrop);
+      bindBounce(this.backdrop);
       g.bindVertexArray(e.emptyVAO);
       clock.span("stage", () => g.drawArrays(g.TRIANGLES, 0, 3));
     }
@@ -533,6 +566,7 @@ export class ObjectRenderer {
         uRoughness: o.roughness,
         uPointSize: o.pointSize,
         uMirror: mirror ? 1 : 0,
+        uReflectStrength: reflectStrength,
         uPixelRatio: w / e.canvas.getBoundingClientRect().width,
         uResolution: [w, h],
       });
@@ -541,6 +575,7 @@ export class ObjectRenderer {
         e.uniform(program, "uBackDepth", 4, "int");
         e.uniform(program, "uFootprint", 6, "int");
         bindRig(program);
+        bindBounce(program);
       }
       g.bindVertexArray(r.vaos[points ? 1 : 0]);
       g.drawArrays(
@@ -549,9 +584,18 @@ export class ObjectRenderer {
         points ? r.pointCount : r.meshCount,
       );
     };
-    // What the shells leave in the floor, before anything that stands on it. The
-    // mirror reverses the winding, so cull the near faces to keep the far ones,
-    // which are the ones now facing the camera.
+    // What the scene leaves in the floor, before anything that stands on it. Shells
+    // are mirrored meshes; dots, inner shaders and contained particles are the
+    // emissive contents a user expects to see pooled on the sweep. The mirror
+    // reverses the winding, so cull the near faces to keep the far ones, which are
+    // the ones now facing the camera.
+    const inner = objects.filter(
+      (o) => o.visible && o.role === "glass" && o.contents && drawFamily,
+    );
+    // Shells keep their long-standing floor reflection; the toggle is for the
+    // emissive contents, which cost a second march per inner shader.
+    const wantInnerReflection =
+      (config.reflections ?? 1) > 0.5 && reflectStrength > 0;
     if (config.stageRoughness < 0.85)
       clock.span("reflection", () => {
         g.enable(g.CULL_FACE);
@@ -561,6 +605,26 @@ export class ObjectRenderer {
             draw(o, this.reflection, false, true);
         g.cullFace(g.BACK);
         g.disable(g.CULL_FACE);
+        if (!wantInnerReflection) return;
+        // Emissive contents, mirrored the same way: dots mirror in the vertex
+        // shader, families mirror their placement, particles mirror world space.
+        for (const o of objects)
+          if (o.visible && o.role !== "glass") draw(o, this.dots, true, true);
+        if (inner.length) {
+          g.bindVertexArray(e.emptyVAO);
+          for (const o of inner)
+            drawFamily(
+              o.contents,
+              [
+                o.position[0] + o.contents.offset[0],
+                o.position[1] + o.contents.offset[1],
+                o.position[2] + o.contents.offset[2],
+              ],
+              { mirror: true, reflectStrength },
+            );
+          g.bindVertexArray(null);
+        }
+        if (drawContents) drawContents(true);
       });
     clock.span("dots", () =>
       objects
@@ -569,9 +633,6 @@ export class ObjectRenderer {
     );
     // A shell may hold a shader family. It is drawn into the same buffer the shells
     // refract, so it behaves like any other contents — occluded, bent and absorbed.
-    const inner = objects.filter(
-      (o) => o.visible && o.role === "glass" && o.contents && drawFamily,
-    );
     if (inner.length)
       clock.span("inner", () => {
         g.bindVertexArray(e.emptyVAO);

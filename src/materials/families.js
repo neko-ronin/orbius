@@ -72,6 +72,7 @@ uniform vec3 uColorA,uColorB,uColorC;
 uniform float uTime,uRotation,uTilt,uZoom,uHue,uIor,uReflection,uRoughness;
 uniform float uInteriorMotion,uEmission,uMaterialScale,uMaterialFold,uSurfaceActivity;
 uniform float uEnclosure,uContained,uPlaceScale;uniform vec3 uPlace;
+uniform float uMirror,uStageFloor,uReflectStrength;
 uniform int uSteps;
 float hash(vec3 p){return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453);}
 float noise(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(mix(hash(i),hash(i+vec3(1,0,0)),f.x),mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),f.x),f.y),mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x),mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)),f.x),f.y),f.z);}
@@ -98,14 +99,21 @@ void main(){
  vec2 st=(uv*2.-1.)*vec2(uResolution.x/uResolution.y,1.);mat3 cam=turn();
  vec3 ro=cam*vec3(0,0,3.7),rd=cam*normalize(vec3(st/uZoom,-2.5));
  float travel=0.;bool hit=false;vec3 p;
- if(uContained>.5){
-  // Rendered inside another workspace's scene: take that camera, and map the
-  // placement back onto this family's own unit sphere so the march is unchanged.
-  vec2 ndc=uv*2.-1.;float aspect=uResolution.x/uResolution.y;
-  mat3 inv=transpose(viewMatrix(uTilt,uRotation));
-  vec3 eyeW=inv*vec3(0,0,4.);
-  vec3 dirW=inv*normalize(vec3(ndc.x*aspect/(2.5*uZoom),ndc.y/(2.5*uZoom),-1.));
-  ro=(eyeW-uPlace)/uPlaceScale;rd=normalize(dirW);
+  if(uContained>.5){
+   // Rendered inside another workspace's scene: take that camera, and map the
+   // placement back onto this family's own unit sphere so the march is unchanged.
+   // Mirrored, the placement sits below the floor while the camera stays put —
+   // the same mirror-the-geometry trick the glass reflection pass uses for meshes.
+   vec2 ndc=uv*2.-1.;float aspect=uResolution.x/uResolution.y;
+   mat3 inv=transpose(viewMatrix(uTilt,uRotation));
+   vec3 eyeW=inv*vec3(0,0,4.);
+   vec3 dirW=inv*normalize(vec3(ndc.x*aspect/(2.5*uZoom),ndc.y/(2.5*uZoom),-1.));
+   // A reflection only exists where the floor is. Looking level or up, the mirrored
+   // placement would otherwise paint its halo across the sky.
+   if(uMirror>.5&&dirW.y>-1e-4){frag=vec4(0.);return;}
+   vec3 place=uPlace;
+   if(uMirror>.5){place.y=2.*uStageFloor-place.y;}
+   ro=(eyeW-place)/uPlaceScale;rd=normalize(dirW);
   // Start at the sphere rather than walking to it: placed small, the entry point is
   // far outside the march's range, and the body would simply never be reached.
   float b=dot(ro,rd),c=dot(ro,ro)-1.;float disc=b*b-c;
@@ -117,10 +125,11 @@ void main(){
  float safe=.72/(1.+uMaterialFold*1.2);
  for(int i=0;i<192;i++){if(i>=uSteps)break;p=ro+rd*travel;float d=shell(p);
   if(d<.0015){hit=true;break;}travel+=max(d*safe,.001);if(travel>7.)break;}
- vec3 color=vec3(.003,.005,.009);
- // Contained, this is composited additively into somebody else's frame, so a miss
- // contributes the family's halo and nothing else — never its own background.
- if(!hit){vec3 h=halo(ro,rd);frag=vec4(uContained>.5?h:color+h,1);return;}
+  vec3 color=vec3(.003,.005,.009);
+  // Contained, this is composited additively into somebody else's frame, so a miss
+  // contributes the family's halo and nothing else — never its own background.
+  // Mirrored, the halo is the reflected glow, faded with the floor's polish.
+  if(!hit){vec3 h=halo(ro,rd);if(uMirror>.5){frag=vec4(h*uReflectStrength,1);return;}frag=vec4(uContained>.5?h:color+h,1);return;}
  vec3 n=normalAt(p);float fres=pow(1.-max(0.,dot(n,-rd)),5.);
 ${
   kind === "volume"
@@ -135,9 +144,10 @@ ${
  color=sum+reflected*(.025+fres*.6)*uReflection*uEnclosure;`
     : ` color=surface(p,n,rd,fres);`
 }
- float hueAngle=uHue*6.283185;vec3 hueAxis=normalize(vec3(1.));
- color=color*cos(hueAngle)+cross(hueAxis,color)*sin(hueAngle)+hueAxis*dot(hueAxis,color)*(1.-cos(hueAngle));
- frag=vec4(max(color,0.),1.);
+  float hueAngle=uHue*6.283185;vec3 hueAxis=normalize(vec3(1.));
+  color=color*cos(hueAngle)+cross(hueAxis,color)*sin(hueAngle)+hueAxis*dot(hueAxis,color)*(1.-cos(hueAngle));
+  if(uMirror>.5){color*=uReflectStrength;}
+  frag=vec4(max(color,0.),1.);
 }`;
 
 // Where the author's first line lands in the assembled shader, so a compiler

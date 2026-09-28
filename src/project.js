@@ -257,6 +257,8 @@ export const defaults = {
   stageFloor: -1.15,
   stageRoughness: 0.42,
   stageTexture: 0.55,
+  reflections: 1,
+  bounce: 0.6,
   // Values for the controls a family declares in its own source, nested by family
   // id so two families may both call something "scale" without colliding.
   params: {},
@@ -334,6 +336,22 @@ export const controls = {
     0.01,
     "Brightness of the studio sweep behind the objects. Glass needs something to refract; zero returns to black space for dark, dendrite-style compositions.",
     "studio sweep lighting photography glass",
+  ],
+  reflections: [
+    "Inner reflections",
+    0,
+    1,
+    1,
+    "Draws the emissive contents — dot clouds, inner shaders, contained simulations — mirrored in the floor alongside the glass shells. Costs a second, half-step march per inner shader.",
+    "planar reflection floor ray marching",
+  ],
+  bounce: [
+    "Colour bounce",
+    0,
+    2,
+    0.05,
+    "How much light the emissive contents throw onto the floor and into neighbouring glass. Zero keeps the studio rig as the only light source.",
+    "global illumination colour bleed bounce light",
   ],
   count: [
     "Particle count",
