@@ -683,6 +683,174 @@ kbd {
 .field-marker:hover {
   background: #553479;
 }
+.field-marker.selected {
+  border-color: #d9c2ff;
+  box-shadow:
+    0 0 0 2px #c0a0ff55,
+    0 0 14px #b092ff55;
+  background: #2a1d4d;
+}
+/* Floating tuner for the selected field. Sits at the side of the live render,
+   beside the stage rather than at the bottom of the inspector scroll, so the
+   eye never leaves the physics it is tuning. */
+.field-card {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 212px;
+  z-index: 12;
+  background: #12101bf2;
+  border: 1px solid #4b3d64;
+  border-radius: 10px;
+  box-shadow: 0 12px 40px #000a;
+  padding: 12px 12px 10px;
+  display: grid;
+  gap: 10px;
+  color: #cfc9dd;
+  backdrop-filter: blur(6px);
+}
+.field-card header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.field-card header > div {
+  flex: 1;
+  min-width: 0;
+}
+.field-card header b {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+  color: #efeaff;
+}
+.field-card header small {
+  display: block;
+  font-size: 8px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: #8f86a3;
+}
+.field-card header > button {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  color: #8f86a3;
+}
+.field-card header > button:hover {
+  background: #221b34;
+  color: #efeaff;
+}
+.field-card-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 8px currentColor;
+}
+.field-card > label {
+  display: grid;
+  gap: 4px;
+  font-size: 9px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #9a90b0;
+}
+.field-card > label span {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.field-card > label i {
+  font-style: normal;
+  font-family: monospace;
+  color: #d9c2ff;
+}
+.field-card input[type="range"] {
+  width: 100%;
+  accent-color: #b092ff;
+}
+.field-card-position {
+  display: flex;
+  gap: 6px;
+}
+.field-card-position label {
+  flex: 1;
+  display: grid;
+  gap: 3px;
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #9a90b0;
+}
+.field-card-position input,
+.field-card-color input[type="color"],
+.field-card-axis select {
+  background: #211a2a;
+  border: 1px solid #45344f;
+  border-radius: 4px;
+  color: #e4e0f0;
+  font: 10px monospace;
+  padding: 4px;
+  width: 100%;
+}
+.field-card-color {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 9px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #9a90b0;
+}
+.field-card-color input[type="color"] {
+  width: 44px;
+  height: 24px;
+  padding: 2px;
+  cursor: pointer;
+}
+.field-card-axis {
+  display: grid;
+  gap: 4px;
+  font-size: 9px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #9a90b0;
+}
+.field-card-actions {
+  display: flex;
+  gap: 6px;
+}
+.field-card-delete {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid #5a3446;
+  border-radius: 6px;
+  padding: 7px;
+  font-size: 10px;
+  color: #f0a8b8;
+  background: #1d1119;
+}
+.field-card-delete:hover {
+  background: #2c1722;
+}
+.field-card > small {
+  font-size: 8px;
+  color: #6a6379;
+  text-align: center;
+}
+.field-list > div.field-selected {
+  outline: 1px solid #4b3d64;
+  outline-offset: 4px;
+  border-radius: 4px;
+}
 .interaction-bar {
   min-height: 88px;
   display: flex;

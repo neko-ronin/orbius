@@ -333,6 +333,10 @@ function App() {
     [paused, setPaused] = useState(false),
     [tool, setTool] = useState("attract"),
     [fields, setFields] = useState([]),
+    // The field the canvas click selected. A click near a placed field selects
+    // it instead of placing a new one, whatever tool is armed, and the floating
+    // card beside the stage edits it — no trip to the bottom of the inspector.
+    [selectedFieldId, setSelectedFieldId] = useState(null),
     [stats, setStats] = useState({
       fps: 0,
       gpu: null,
@@ -393,7 +397,22 @@ function App() {
     record = useRef(),
     recordTimer = useRef(),
     latest = useRef(),
-    initial = useRef(true);
+    initial = useRef(true),
+    // Armed once the pointer enters the floating field card; leaving after that
+    // dismisses it. A card that was never entered stays put.
+    cardEntered = useRef(false);
+  const selectedField = fields.find((f) => f.id === selectedFieldId) ?? null;
+  // A removed field cannot stay selected — clearing, deleting, or a burst
+  // expiring drops the card with it.
+  useEffect(() => {
+    if (selectedFieldId && !fields.some((f) => f.id === selectedFieldId))
+      setSelectedFieldId(null);
+  }, [fields, selectedFieldId]);
+  // A fresh selection starts un-entered, so the enter-then-exit rule applies per
+  // opening rather than leaking across selections.
+  useEffect(() => {
+    cardEntered.current = false;
+  }, [selectedFieldId]);
   latest.current = {
     config,
     objects,
@@ -621,6 +640,7 @@ function App() {
     if (!payload) {
       setParticleContainer(null);
       setFields([]);
+      setSelectedFieldId(null);
       engine.current?.setContainer(null);
       engine.current?.reset(latest.current.config);
       setDirty(true);
@@ -661,6 +681,7 @@ function App() {
       setMode(p.mode);
       setGraph(p.graph);
       setFields(p.fields);
+      setSelectedFieldId(null);
       setName(p.name);
       setPreset(-1);
       setDirty(false);
@@ -710,6 +731,7 @@ function App() {
   function reset() {
     engine.current?.reset(latest.current.config);
     setFields([]);
+    setSelectedFieldId(null);
     notify("Simulation restarted. Fields cleared.");
   }
   // Back to a blank slate in the current workspace: entry settings, no fields,
@@ -728,6 +750,7 @@ function App() {
         : { ...defaults, ...materialBase };
     setConfig(entry);
     setFields([]);
+    setSelectedFieldId(null);
     setObjects([]);
     setSelectedObject(null);
     setParticleContainer(null);
@@ -844,6 +867,7 @@ function App() {
         setShow(false);
         setHelp(false);
         setTipEntry(null);
+        setSelectedFieldId(null);
         return;
       }
       if (k === " ") {
@@ -854,6 +878,7 @@ function App() {
       else if (k === "p") capture();
       else if (k === "x") {
         setFields([]);
+        setSelectedFieldId(null);
         notify("All fields cleared.");
       } else if (k === "h") resetScene();
       else if (k === "?") setHelp((h) => !h);
@@ -868,8 +893,41 @@ function App() {
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   });
+  // Screen-space hit test: the closest placed field under the click, if any.
+  // Projected the same way its marker is placed, compared in pixels so the
+  // target matches what the eye sees. Markers are 30px across; 28px keeps a
+  // near miss forgiving without swallowing empty canvas.
+  function fieldAtPointer(clientX, clientY) {
+    const rect = canvas.current?.getBoundingClientRect();
+    const view = engine.current?.view;
+    if (!rect || !view || !fields.length) return null;
+    let best = null,
+      bestDist = 28;
+    for (const f of fields) {
+      const [x, y, depth] = viewProject(f.position, view);
+      if (depth < 1) continue;
+      const px = (x + 1) * 0.5 * rect.width,
+        py = (1 - y) * 0.5 * rect.height;
+      const d = Math.hypot(px - (clientX - rect.left), py - (clientY - rect.top));
+      if (d <= bestDist) {
+        bestDist = d;
+        best = f;
+      }
+    }
+    return best;
+  }
   function stageDown(e) {
     if (e.button !== 0) return;
+    // Selecting beats placing and orbiting alike: a click on a placed field
+    // selects it whatever tool is armed, and no new field is born.
+    if (resolved.mode === "particles" && fields.length) {
+      const hit = fieldAtPointer(e.clientX, e.clientY);
+      if (hit) {
+        setSelectedFieldId(hit.id);
+        return;
+      }
+      setSelectedFieldId(null);
+    }
     if (tool === "cursor" || resolved.mode !== "particles") {
       drag.current = {
         x: e.clientX,
@@ -903,6 +961,7 @@ function App() {
       color: config.lightColor,
     };
     setFields((fs) => [...fs, f]);
+    setSelectedFieldId(tool === "burst" ? null : f.id);
     setDirty(true);
     if (tool === "burst")
       setTimeout(() => setFields((fs) => fs.filter((v) => v.id !== f.id)), 650);
@@ -994,6 +1053,7 @@ function App() {
     setMode(next);
     setTab("parameters");
     setTipEntry(null);
+    setSelectedFieldId(null);
     setDirty(true);
     engine.current?.clear();
   }
@@ -1209,6 +1269,7 @@ function App() {
               setName(r.name);
               setPreset(-1);
               setFields([]);
+              setSelectedFieldId(null);
               setDirty(true);
               engine.current?.reset(c);
             }}
@@ -1342,7 +1403,7 @@ function App() {
                 )}
                 {(resolved.mode === "particles" ? fields : []).map((f) => (
                   <button
-                    className={`field-marker field-${f.type}`}
+                    className={`field-marker field-${f.type}${f.id === selectedFieldId ? " selected" : ""}`}
                     key={f.id}
                     ref={(el) => {
                       markers.current.set(f.id, el);
@@ -1350,8 +1411,9 @@ function App() {
                         placeMarker(el, f.position, engine.current.view);
                       return () => markers.current.delete(f.id);
                     }}
-                    aria-label={`Remove ${f.type} field`}
-                    title={`${f.type} · strength ${f.strength.toFixed(1)} · drag to move, Alt-drag for height, click to remove`}
+                    aria-label={`Select ${f.type} field`}
+                    aria-pressed={f.id === selectedFieldId}
+                    title={`${f.type} · strength ${f.strength.toFixed(1)} · drag to move, Alt-drag for height, click to select`}
                     onPointerDown={(e) => {
                       if (e.button !== 0) return;
                       e.currentTarget.setPointerCapture(e.pointerId);
@@ -1360,8 +1422,10 @@ function App() {
                     onPointerMove={dragField}
                     onPointerCancel={() => (fieldDrag.current = null)}
                     onClick={() => {
-                      if (!fieldDrag.current?.moved)
-                        setFields((fs) => fs.filter((v) => v.id !== f.id));
+                      // Clicking a placed field selects it for the side card —
+                      // never places a new one, never deletes this one. A drag
+                      // that moved still ends selected at its new spot.
+                      setSelectedFieldId(f.id);
                       fieldDrag.current = null;
                     }}
                     style={{ "--field-color": f.color }}
@@ -1370,6 +1434,162 @@ function App() {
                     <span>{f.strength.toFixed(1)}</span>
                   </button>
                 ))}
+                {selectedField && !show && resolved.mode === "particles" && (
+                  <section
+                    className="field-card"
+                    aria-label={`${selectedField.type} field parameters`}
+                    onMouseEnter={() => {
+                      cardEntered.current = true;
+                    }}
+                    onMouseLeave={() => {
+                      if (cardEntered.current) setSelectedFieldId(null);
+                    }}
+                  >
+                    <header>
+                      <span
+                        className="field-card-dot"
+                        style={{ background: selectedField.color }}
+                      />
+                      <div>
+                        <b>{selectedField.type}</b>
+                        <small>
+                          {selectedField.reach === "column"
+                            ? "column · along line of sight"
+                            : "point field"}
+                        </small>
+                      </div>
+                      <button
+                        aria-label="Close field parameters"
+                        onClick={() => setSelectedFieldId(null)}
+                      >
+                        <Icon name="close" size={12} />
+                      </button>
+                    </header>
+                    <label>
+                      <span>
+                        Strength <i>{selectedField.strength.toFixed(1)}</i>
+                      </span>
+                      <input
+                        type="range"
+                        min="0.1"
+                        max="12"
+                        step="0.1"
+                        value={selectedField.strength}
+                        onChange={(e) =>
+                          editField(selectedField.id, {
+                            strength: +e.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                    <label>
+                      <span>
+                        Radius <i>{selectedField.radius.toFixed(2)}</i>
+                      </span>
+                      <input
+                        type="range"
+                        min="0.1"
+                        max="6"
+                        step="0.05"
+                        value={selectedField.radius}
+                        onChange={(e) =>
+                          editField(selectedField.id, {
+                            radius: +e.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                    <div className="field-card-position">
+                      {["x", "y", "z"].map((axis, i) => (
+                        <label key={axis}>
+                          {axis}
+                          <input
+                            aria-label={`${selectedField.type} ${axis} position`}
+                            type="number"
+                            min={-FIELD_EXTENT}
+                            max={FIELD_EXTENT}
+                            step="0.1"
+                            value={selectedField.position[i]}
+                            onChange={(e) => {
+                              if (e.target.value)
+                                editField(selectedField.id, {
+                                  position: selectedField.position.with(
+                                    i,
+                                    fieldCoordinate(+e.target.value),
+                                  ),
+                                });
+                            }}
+                          />
+                        </label>
+                      ))}
+                    </div>
+                    {selectedField.type === "light" && (
+                      <label className="field-card-color">
+                        Light color
+                        <input
+                          type="color"
+                          value={selectedField.color}
+                          onChange={(e) =>
+                            editField(selectedField.id, {
+                              color: e.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                    )}
+                    {(selectedField.type === "vortex" ||
+                      selectedField.reach === "column") && (
+                      <label className="field-card-axis">
+                        {selectedField.reach === "column"
+                          ? "runs along"
+                          : "turns about"}
+                        <select
+                          aria-label={`${selectedField.type} axis`}
+                          value={
+                            Object.keys(axes).find((k) =>
+                              axes[k].every(
+                                (v, i) => v === selectedField.axis[i],
+                              ),
+                            ) ?? "placed"
+                          }
+                          onChange={(e) =>
+                            editField(selectedField.id, {
+                              axis:
+                                axes[e.target.value] ??
+                                viewAxis(
+                                  selectedField.position,
+                                  engine.current.view,
+                                ),
+                            })
+                          }
+                        >
+                          <option value="placed">its line of sight</option>
+                          <option value="camera">
+                            the line of sight from here
+                          </option>
+                          <option value="x">X</option>
+                          <option value="y">Y</option>
+                          <option value="z">Z</option>
+                        </select>
+                      </label>
+                    )}
+                    <div className="field-card-actions">
+                      <button
+                        className="field-card-delete"
+                        onClick={() => {
+                          setFields((fs) =>
+                            fs.filter((v) => v.id !== selectedField.id),
+                          );
+                          setSelectedFieldId(null);
+                        }}
+                      >
+                        <Icon name="trash" size={13} />
+                        Delete field
+                      </button>
+                    </div>
+                    <small>Leaves when entered, then left.</small>
+                  </section>
+                )}
                 <div className="stage-crosshair cross-a" />
                 <div className="stage-crosshair cross-b" />
                 {!fields.length && mode === "particles" && (
@@ -1438,7 +1658,10 @@ function App() {
               className="clear-fields"
               title="Clear fields · X"
               aria-label="Clear fields"
-              onClick={() => setFields([])}
+              onClick={() => {
+                setFields([]);
+                setSelectedFieldId(null);
+              }}
             >
               <Icon name="trash" size={17} />
             </button>
@@ -1691,7 +1914,12 @@ function App() {
                 <div className="field-list">
                   {fields.length ? (
                     fields.map((f) => (
-                      <div key={f.id}>
+                      <div
+                        key={f.id}
+                        className={
+                          f.id === selectedFieldId ? "field-selected" : ""
+                        }
+                      >
                         <label>
                           {f.reach === "column" ? `${f.type} · column` : f.type}
                           <input
@@ -1714,9 +1942,13 @@ function App() {
                         </label>
                         <button
                           aria-label={`Delete ${f.type}`}
-                          onClick={() =>
-                            setFields((fs) => fs.filter((v) => v.id !== f.id))
-                          }
+                          onClick={() => {
+                            setFields((fs) =>
+                              fs.filter((v) => v.id !== f.id),
+                            );
+                            if (f.id === selectedFieldId)
+                              setSelectedFieldId(null);
+                          }}
                         >
                           <Icon name="close" size={12} />
                         </button>
@@ -2048,7 +2280,7 @@ function App() {
                   Shift + click doubles force. Scroll to zoom.
                   <br />
                   Drag a field marker to move it, Alt-drag to raise or lower it,
-                  click it to remove it. X clears all.
+                  click a field to tune it beside the stage. X clears all.
                 </small>
               </div>
               <div>
